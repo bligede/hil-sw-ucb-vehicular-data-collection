@@ -1,0 +1,31 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Keluaran alat bantu
+*.png
+ringkas_*.csv
+
+# Data lapangan tidak masuk repo kode.
+# Log sesi berukuran puluhan ribu baris per fase dan disimpan terpisah
+# beserta cadangannya, sesuai prosedur pencadangan data.
+data/
+*.log
+
+# Sistem
+Thumbs.db
+.DS_Store
+desktop.ini
