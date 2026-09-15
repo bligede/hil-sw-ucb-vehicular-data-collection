@@ -4,8 +4,10 @@
 // dengan atribut RTC_DATA_ATTR. Ini batasan ESP32: hanya variabel global yang
 // dapat dialokasikan di RTC RAM (Panduan HIL Subbab 2.2).
 //
-// Total RTC RAM yang dipakai matriks pembelajaran:
-//   4 arm x 50 slot x 4 byte = 800 byte, jauh di bawah kapasitas 8 kB.
+// Total RTC RAM yang dipakai matriks pembelajaran (params.h Bagian 7):
+//   mode SW-UCB: 4 arm x (50 slot x 4 byte + 8 byte) = 832 byte
+//   mode UCB1:   4 arm x 8 byte                      =  32 byte
+// keduanya jauh di bawah kapasitas 8 kB.
 //
 // Uji persistensi 50 siklus ada pada SOP Tahap 4.2.
 
@@ -45,8 +47,15 @@ static void cetak_parameter() {
     Serial.println("=====================================================");
     Serial.printf ("  Node sensor  %s\n", FW_VERSI);
     Serial.println("=====================================================");
+#if MODE_SW_UCB
+    Serial.printf ("  mode=SW-UCB (jendela W, Persamaan 2.5-2.6)\n");
     Serial.printf ("  W=%d  xi=%.2f  alpha=%.2f  beta=%.2f\n",
                    W_SIZE, XI, ALPHA, BETA);
+#else
+    Serial.printf ("  mode=UCB1 (kumulatif tanpa jendela, Persamaan 2.4) -- "
+                   "W_SIZE tidak dipakai\n");
+    Serial.printf ("  xi=%.2f  alpha=%.2f  beta=%.2f\n", XI, ALPHA, BETA);
+#endif
     Serial.printf ("  E_maks=%.1f mJ  %s\n", E_MAKS_mJ,
                    E_MAKS_TERUKUR ? "(terukur Tahap 4.1)"
                                   : "(ESTIMASI - belum diukur)");

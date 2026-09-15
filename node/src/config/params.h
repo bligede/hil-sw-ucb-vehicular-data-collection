@@ -163,7 +163,29 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 #define E_SKALA       10.0f  // byte 3..4 = energi mJ * 10 (satuan 0,1 mJ)
 
 // ============================================================
-// 7. Penanda kompilasi
+// 7. Mode algoritma: SW-UCB (default) atau UCB1 pembanding (Naskah 2.1.13,
+//    Rumusan Masalah 3 / Hipotesis Minor 1)
 // ============================================================
-#define FW_VERSI      "node-1.0"
+// SW-UCB membatasi rata-rata dan isi logaritma ke W_SIZE transmisi terakhir.
+// UCB1 memakai rata-rata kumulatif seluruh riwayat, tanpa batas jendela.
+// Itulah SATU-SATUNYA perbedaan yang dimaksudkan: ruang aksi, fungsi reward,
+// dan XI tetap sama persis pada kedua mode, supaya selisih hasil yang teramati
+// murni berasal dari ada-tidaknya jendela geser (Bagian 6.10 naskah belajar).
+//
+// Aktifkan untuk fase pembanding pada Fase Uji Multi-Kecepatan (Subbab 4.8.5):
+//   #define MODE_UCB1
+#ifndef MODE_UCB1
+  #define MODE_SW_UCB 1
+#else
+  #define MODE_SW_UCB 0
+#endif
+
+// ============================================================
+// 8. Penanda kompilasi
+// ============================================================
+#if MODE_SW_UCB
+  #define FW_VERSI    "node-1.0-swucb"
+#else
+  #define FW_VERSI    "node-1.0-ucb1"
+#endif
 #define SERIAL_BAUD   115200

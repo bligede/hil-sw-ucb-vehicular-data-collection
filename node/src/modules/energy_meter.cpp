@@ -18,12 +18,16 @@ bool energy_init() {
     // Rentang shunt +-320 mV pada shunt 0,1 ohm memberi batas ukur 3,2 A.
     // Arus baterai puncak yang diperkirakan 286 mA menghasilkan 28,6 mV,
     // jauh di dalam rentang (Panduan Perakitan Subbab II.1).
-    ina219.setPGain(PG_320);
-    ina219.setBusRange(BRNG_16);
+    //
+    // Nama enum berawalan INA219_ mengikuti API pustaka 1.4.1 (lihat catatan
+    // versi pada platformio.ini); fungsinya sama persis dengan PG_320/
+    // BRNG_16/BIT_MODE_12/CONTINUOUS pada draf sebelumnya.
+    ina219.setPGain(INA219_PG_320);
+    ina219.setBusRange(INA219_BRNG_16);
 
     // Konversi tunggal 12-bit = 532 us. Lihat catatan D1 pada header.
-    ina219.setADCMode(BIT_MODE_12);
-    ina219.setMeasureMode(CONTINUOUS);
+    ina219.setADCMode(INA219_BIT_MODE_12);
+    ina219.setMeasureMode(INA219_CONTINUOUS);
     ina219.setShuntSizeInOhms(0.1f);
 
     s_vbus_V = ina219.getBusVoltage_V();
