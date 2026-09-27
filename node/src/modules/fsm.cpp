@@ -20,6 +20,7 @@ extern float    rtc_e_prev_mJ;
 extern uint32_t rtc_cooldown_sampai_s;
 extern uint32_t rtc_uptime_s;
 extern bool     rtc_dalam_guard;
+extern uint8_t  rtc_sweep_arm;
 
 extern SW_UCB_Agent agent;
 
@@ -55,7 +56,12 @@ static void tidur(uint64_t detik) {
 
 // ------------------------- CONTACT_WINDOW ---------------------------------
 static void kirim_satu_paket() {
+#if MODE_SWEEP_AKTIF
+    // Arm tetap sepanjang satu siklus ACK; berganti di evaluasi_reward().
+    uint8_t arm_idx = rtc_sweep_arm;
+#else
     uint8_t arm_idx = agent.select_arm();
+#endif
     rtc_arm_sekarang = arm_idx;
 
     int16_t ax, ay, az;
@@ -134,6 +140,12 @@ static void evaluasi_reward() {
     }
 
     agent.update(rtc_arm_sekarang, reward);
+
+#if MODE_SWEEP_AKTIF
+    // Giliran lanjut ke arm berikutnya, juga lintas contact window, sehingga
+    // sebaran siklus antar-arm tetap merata sepanjang sesi.
+    rtc_sweep_arm = (uint8_t)((rtc_sweep_arm + 1) % N_ARMS);
+#endif
 
     rtc_ack_counter = 0;
     rtc_energi_akum_mJ = 0.0;

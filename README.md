@@ -9,7 +9,7 @@ Program Studi Magister Teknik Elektro, Pascasarjana Universitas Udayana.
 > LoRa transmission control at the edge. A Sliding-Window UCB agent runs on an
 > ESP32 roadside node and selects transmit power and coding rate on its own,
 > using a reward built from measured Packet Delivery Ratio and **physically
-> measured** transmission energy from an INA219 current sensor — not datasheet
+> measured** transmission energy from an INA219 current sensor, not datasheet
 > estimates. A mobile gateway on a vehicle collects the data opportunistically,
 > which makes the radio channel non-stationary by construction.
 
@@ -68,6 +68,35 @@ gateway/                firmware mobile gateway
 tools/
   prevalidasi_swucb.py  validasi SW-UCB vs UCB1 sebelum firmware ditulis
   ringkas_log.py        peringkas log paket menjadi baris contact window
+  olah_siklus.py        ekspor per siklus ACK dan per contact window, cakupan arm per skenario
+```
+
+## Mode kompilasi node
+
+Mode dipilih lewat `build_flags` pada `node/platformio.ini`, satu mode per
+unggahan. Log tiap mode disimpan di berkas terpisah dan tidak dicampur.
+
+| Mode | Flag | Pemilihan arm | Dipakai untuk |
+| --- | --- | --- | --- |
+| SW-UCB | (default) | Skor SW-UCB, rata-rata atas buffer 50 reward terakhir tiap arm | Uji hipotesis |
+| UCB1 | `-DMODE_UCB1` | Indeks yang sama, rata-rata kumulatif seluruh riwayat | Pembanding re-konvergensi |
+| Sweep | `-DMODE_SWEEP` | Bergiliran Arm 1 sampai 4, satu arm per siklus ACK | Lintasan eksplorasi tambahan bila cakupan arm di bawah 10 siklus per skenario; tidak masuk uji hipotesis |
+
+Kedua algoritma memakai koefisien eksplorasi `XI` yang sama, sehingga satu-satunya
+beda di antara keduanya adalah jendela. Label mode dicetak saat boot dan pada
+`FW_VERSI`.
+
+Cakupan arm per skenario diperiksa sesudah tiap sesi:
+
+```bash
+python tools/olah_siklus.py "data/2026-09-05_S7/*.csv" --metode SW-UCB --e-maks 113.3
+```
+
+Pra-validasi Tahap 0 mencetak pula pembandingan berpasangan (menang, seri,
+kalah, selisih berpasangan dengan selang kepercayaan bootstrap, dan uji tanda):
+
+```bash
+python tools/prevalidasi_swucb.py --ulangan 200 --seed 1
 ```
 
 ## Membangun
@@ -96,7 +125,7 @@ keduanya berbeda, hasil validasinya tidak mewakili perilaku firmware.
 **Energi dicuplik selama transmisi, bukan sesudahnya.** Membaca INA219 sesudah
 `endPacket()` selesai merekam arus mode siaga, karena radio sudah kembali diam.
 Nilainya bukan hanya terlalu kecil, tetapi hampir seragam untuk keempat arm
-sebab arus siaga tidak bergantung pada TP maupun CR — komponen energi pada
+sebab arus siaga tidak bergantung pada TP maupun CR, sehingga komponen energi pada
 reward berubah menjadi derau. Firmware ini memakai transmisi asinkron dan
 mencuplik arus dalam gelung selama radio memancar, lalu mengintegrasikan daya
 terhadap waktu. Mode ADC dipakai pada konversi tunggal 12-bit (532 us), bukan

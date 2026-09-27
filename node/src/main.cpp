@@ -1,4 +1,4 @@
-// main.cpp — node sensor statis
+// main.cpp: node sensor statis
 //
 // Variabel yang harus bertahan lintas siklus deep sleep dideklarasikan di sini
 // dengan atribut RTC_DATA_ATTR. Ini batasan ESP32: hanya variabel global yang
@@ -7,7 +7,8 @@
 // Total RTC RAM yang dipakai matriks pembelajaran (params.h Bagian 7):
 //   mode SW-UCB: 4 arm x (50 slot x 4 byte + 8 byte) = 832 byte
 //   mode UCB1:   4 arm x 8 byte                      =  32 byte
-// keduanya jauh di bawah kapasitas 8 kB.
+// ditambah 1 byte giliran arm untuk mode sweep; semuanya jauh di bawah
+// kapasitas 8 kB.
 //
 // Uji persistensi 50 siklus ada pada SOP Tahap 4.2.
 
@@ -35,6 +36,7 @@ RTC_DATA_ATTR uint32_t rtc_cooldown_sampai_s = 0;
 RTC_DATA_ATTR uint32_t rtc_uptime_s          = 0;
 RTC_DATA_ATTR bool     rtc_dalam_guard       = false;
 RTC_DATA_ATTR uint32_t rtc_penanda_sah       = 0;
+RTC_DATA_ATTR uint8_t  rtc_sweep_arm         = 0;   // giliran arm, mode sweep
 
 static const uint32_t PENANDA_SAH = 0x57554342UL;  // "WUCB"
 
@@ -47,7 +49,11 @@ static void cetak_parameter() {
     Serial.println("=====================================================");
     Serial.printf ("  Node sensor  %s\n", FW_VERSI);
     Serial.println("=====================================================");
-#if MODE_SW_UCB
+#if MODE_SWEEP_AKTIF
+    Serial.printf ("  mode=SWEEP (arm bergiliran per siklus ACK, bukan keputusan agen)\n");
+    Serial.printf ("  label log: Metode Sweep; tidak masuk analisis hipotesis\n");
+    Serial.printf ("  alpha=%.2f  beta=%.2f\n", ALPHA, BETA);
+#elif MODE_SW_UCB
     Serial.printf ("  mode=SW-UCB (jendela W, Persamaan 2.5-2.6)\n");
     Serial.printf ("  W=%d  xi=%.2f  alpha=%.2f  beta=%.2f\n",
                    W_SIZE, XI, ALPHA, BETA);
@@ -125,6 +131,7 @@ void setup() {
         rtc_e_prev_mJ         = 0.0f;
         rtc_cooldown_sampai_s = 0;
         rtc_uptime_s          = 0;
+        rtc_sweep_arm         = 0;
         rtc_penanda_sah       = PENANDA_SAH;
     } else if (bangun_dari_sleep) {
         Serial.printf("Bangun: t=%lu seq=%u vbatt=%.2fV\n",

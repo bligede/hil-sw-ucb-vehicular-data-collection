@@ -1,4 +1,4 @@
-// params.h — seluruh parameter yang dapat disetel, terkumpul di satu berkas.
+// params.h: seluruh parameter yang dapat disetel, terkumpul di satu berkas.
 //
 // SOP Subbab I.2 mensyaratkan nilai yang menyimpang dari Panduan HIL ditempatkan
 // sebagai konstanta yang mudah diubah, bukan tersebar di dalam kode, sampai
@@ -49,7 +49,7 @@
 #pragma once
 
 // ============================================================
-// 1. Ruang aksi SW-UCB (Naskah 4.1.1 — tidak berubah)
+// 1. Ruang aksi SW-UCB (Naskah 4.1.1, tidak berubah)
 // ============================================================
 #define N_ARMS        4
 #define W_SIZE       50    // ukuran sliding window (transmisi)
@@ -58,10 +58,10 @@
 // Arm: {TP dBm, CR (5..8 untuk 4/5..4/8)}
 struct ArmConfig { int8_t tp_dbm; uint8_t cr; };
 static const ArmConfig ARM_CONFIG[N_ARMS] = {
-    {  5, 5 },   // Arm 1 — daya sangat rendah, proteksi galat minimal
-    { 10, 5 },   // Arm 2 — transisi, jarak moderat LoS stabil
-    { 14, 7 },   // Arm 3 — mengimbangi redaman jarak menjauh
-    { 20, 8 }    // Arm 4 — worst-case, NLoS atau kecepatan tinggi
+    {  5, 5 },   // Arm 1: daya sangat rendah, proteksi galat minimal
+    { 10, 5 },   // Arm 2: transisi, jarak moderat LoS stabil
+    { 14, 7 },   // Arm 3: mengimbangi redaman jarak menjauh
+    { 20, 8 }    // Arm 4: worst-case, NLoS atau kecepatan tinggi
 };
 
 // Parameter LoRa yang dikunci sebagai variabel kontrol
@@ -80,7 +80,7 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 #ifdef PAKAI_NILAI_PANDUAN
   #define BETA         0.02f  // nilai Panduan HIL 2.7
 #else
-  #define BETA         1.0f   // D5 — DIKONFIRMASI Pembimbing I, 5 Sep 2026.
+  #define BETA         1.0f   // D5: DIKONFIRMASI Pembimbing I, 5 Sep 2026.
                               // Pada 0,02 selisih reward Arm 1 vs Arm 2 di jarak
                               // dekat hanya 0,001, tenggelam dalam varians ukur.
                               // Syarat yang melekat: setelah E_MAKS_mJ diisi hasil
@@ -121,7 +121,7 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
   #define T_SLEEP_S       3ULL   // D3
 #endif
 
-// Ambang RSSI — WAJIB diganti hasil kalibrasi SOP Tahap 4.5
+// Ambang RSSI: WAJIB diganti hasil kalibrasi SOP Tahap 4.5
 #define RSSI_DETECT   (-100)     // dBm
 #define RSSI_EXIT     (-105)     // dBm
 #define RSSI_TERKALIBRASI 0      // set 1 setelah diisi hasil Tahap 4.5
@@ -129,8 +129,8 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // ============================================================
 // 4. FSM (Tabel 4.1 naskah + Catatan Perbaikan A.2)
 // ============================================================
-#define TIMEOUT_WINDOW_MS 240000UL // D9 — 240 s; T_max terpanjang S3 = 216 s
-#define COOLDOWN_MS        60000UL // D9 — jeda sebelum boleh masuk ulang
+#define TIMEOUT_WINDOW_MS 240000UL // D9: 240 s; T_max terpanjang S3 = 216 s
+#define COOLDOWN_MS        60000UL // D9: jeda sebelum boleh masuk ulang
 #define V_BATT_MIN         3.30f   // masuk BATTERY_GUARD
 #define V_BATT_PULIH       3.50f   // keluar dari BATTERY_GUARD
 #define GUARD_SLEEP_S      3600ULL // tidur panjang saat baterai kritis
@@ -146,7 +146,7 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 #endif
 
 // ============================================================
-// 5. Pengukuran energi (Dokumen Revisi Bagian C — D1)
+// 5. Pengukuran energi (Dokumen Revisi Bagian C, D1)
 // ============================================================
 // Arus dicuplik SELAMA transmisi berlangsung, bukan sesudahnya. Mode konversi
 // tunggal 12-bit (532 us), bukan rata-rata 128 cuplikan (68 ms) yang lebih
@@ -155,7 +155,7 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 #define ENERGI_MAKS_SAMPEL  400   // batas atas cuplikan per transmisi
 
 // ============================================================
-// 6. Muatan paket (Dokumen Revisi + Panduan Perakitan — D6)
+// 6. Muatan paket (Dokumen Revisi + Panduan Perakitan, D6)
 // ============================================================
 #define PAYLOAD_LEN   12
 #define VBATT_OFFSET  2.50f  // byte 5 = (V - 2,50) * 100
@@ -180,10 +180,31 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
   #define MODE_SW_UCB 0
 #endif
 
+// Mode sweep: lintasan eksplorasi tambahan (keputusan Pembimbing I, 27 Sep 2026).
+// Arm TIDAK dipilih agen, melainkan bergiliran Arm 1, 2, 3, 4 per siklus ACK,
+// sehingga setiap arm memperoleh siklus yang hampir sama banyak. Dipakai hanya
+// untuk skenario yang cakupan arm-nya di bawah N_MIN_SIKLUS menurut
+// tools/olah_siklus.py. Log mode ini disimpan terpisah dengan label Metode
+// Sweep dan tidak masuk analisis hipotesis SW-UCB (Naskah Subbab 4.4.6).
+// Agen tetap menerima reward agar log boot dan RTC RAM konsisten, tetapi
+// keputusannya tidak dipakai.
+//   #define MODE_SWEEP
+#ifdef MODE_SWEEP
+  #ifdef MODE_UCB1
+    #error "MODE_SWEEP dan MODE_UCB1 tidak boleh aktif bersamaan"
+  #endif
+  #define MODE_SWEEP_AKTIF 1
+#else
+  #define MODE_SWEEP_AKTIF 0
+#endif
+#define N_MIN_SIKLUS  10   // batas kecukupan siklus ACK per arm per skenario (Subbab 4.4.6)
+
 // ============================================================
 // 8. Penanda kompilasi
 // ============================================================
-#if MODE_SW_UCB
+#if MODE_SWEEP_AKTIF
+  #define FW_VERSI    "node-1.0-sweep"
+#elif MODE_SW_UCB
   #define FW_VERSI    "node-1.0-swucb"
 #else
   #define FW_VERSI    "node-1.0-ucb1"
