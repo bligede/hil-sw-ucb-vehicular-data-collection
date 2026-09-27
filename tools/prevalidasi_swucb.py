@@ -1,4 +1,4 @@
-"""Pra-validasi SW-UCB terhadap UCB1 — SOP Tahap 0 (Panduan HIL Subbab 0.1-0.3).
+"""Pra-validasi SW-UCB terhadap UCB1, SOP Tahap 0 (Panduan HIL Subbab 0.1-0.3).
 
 Dijalankan sebelum satu baris firmware ditulis. Memperbaiki kekeliruan formula
 di Python jauh lebih murah daripada menelusurinya di ESP32.
@@ -16,6 +16,14 @@ Keluaran: ringkasan angka ke layar, grafik konvergensi ke berkas PNG, dan
 angka re-konvergensi UCB1 yang wajib disimpan sebagai data rujukan Subbab 4.8.5
 naskah, lalu dilaporkan ke Pembimbing I bersama nilai E maksimum Tahap 4.1.
 
+Pembandingan berpasangan: kedua algoritma dijalankan pada benih acak yang sama
+untuk tiap ulangan, sehingga hasilnya dibandingkan per ulangan. Skrip mencetak
+jumlah menang, seri, dan kalah, selisih rata-rata berpasangan beserta selang
+kepercayaan bootstrap 95 persen (benih bootstrap tetap, BOOT_SEED), dan uji
+tanda eksak dua sisi atas ulangan yang tidak seri. Ulangan yang tidak pernah
+re-konvergen dihitung sebagai paling lambat pada uji tanda dan tidak ikut pada
+selisih rata-rata.
+
 Pemakaian:
     python prevalidasi_swucb.py
     python prevalidasi_swucb.py --ulangan 200 --keluaran hasil.png
@@ -24,6 +32,7 @@ Pemakaian:
 import argparse
 import math
 import random
+import statistics
 
 # Nilai HARUS sama dengan node/src/config/params.h
 N_ARMS = 4
@@ -40,6 +49,9 @@ JENDELA_DOMINAN = 20    # panjang jendela geser untuk menilai dominasi
 MEAN_FASE1 = [0.8, 0.5, 0.4, 0.2]
 MEAN_FASE2 = [0.2, 0.4, 0.5, 0.8]
 STD = 0.1
+
+N_BOOT = 10000          # jumlah sampel ulang bootstrap
+BOOT_SEED = 0           # benih bootstrap tetap agar selang kepercayaan dapat diulang
 
 
 def reward(arm, t, rng):
@@ -150,12 +162,57 @@ def ringkas(nama, hasil):
     if not sah:
         return None, f"  {nama:8s}: tidak pernah re-konvergen ({gagal} ulangan)"
     rata = sum(sah) / len(sah)
+    sb = statistics.stdev(sah) if len(sah) > 1 else 0.0
     teks = (
-        f"  {nama:8s}: rata {rata:6.1f} iterasi   "
-        f"min {min(sah):3d}   maks {max(sah):3d}   "
+        f"  {nama:8s}: rata {rata:6.1f}   median {statistics.median(sah):5.1f}   "
+        f"simpangan baku {sb:5.1f}   min {min(sah):3d}   maks {max(sah):3d}   "
         f"gagal {gagal}/{len(hasil)}"
     )
     return rata, teks
+
+
+def uji_berpasangan(sw, ucb):
+    """Bandingkan kedua algoritma per ulangan (benih acak yang sama)."""
+    menang = seri = kalah = 0
+    selisih = []
+    for s, u in zip(sw, ucb):
+        s_ = math.inf if s is None else s
+        u_ = math.inf if u is None else u
+        if s_ < u_:
+            menang += 1
+        elif s_ > u_:
+            kalah += 1
+        else:
+            seri += 1
+        if s is not None and u is not None:
+            selisih.append(u - s)
+
+    n = len(sw)
+    print("Pembandingan berpasangan (benih acak sama untuk kedua algoritma):")
+    print(f"  SW-UCB lebih cepat : {menang:3d}/{n}")
+    print(f"  seri               : {seri:3d}/{n}")
+    print(f"  UCB1 lebih cepat   : {kalah:3d}/{n}")
+
+    if selisih:
+        rng = random.Random(BOOT_SEED)
+        m = len(selisih)
+        boot = sorted(
+            sum(selisih[rng.randrange(m)] for _ in range(m)) / m
+            for _ in range(N_BOOT)
+        )
+        bawah = boot[int(0.025 * N_BOOT) - 1]
+        atas = boot[int(0.975 * N_BOOT) - 1]
+        print(f"  selisih rata-rata (UCB1 - SW-UCB): {sum(selisih) / m:.1f} iterasi, "
+              f"selang kepercayaan bootstrap 95% [{bawah:.1f}, {atas:.1f}] "
+              f"({N_BOOT} sampel ulang, benih {BOOT_SEED}, {m} pasangan)")
+
+    tak_seri = menang + kalah
+    if tak_seri:
+        k = min(menang, kalah)
+        ekor = sum(math.comb(tak_seri, i) for i in range(k + 1))
+        p = min(1.0, 2 * ekor / 2 ** tak_seri)
+        print(f"  uji tanda eksak dua sisi ({tak_seri} ulangan tidak seri): p = {p:.2g}")
+    print()
 
 
 def main():
@@ -165,7 +222,7 @@ def main():
     p.add_argument("--seed", type=int, default=1)
     a = p.parse_args()
 
-    print("Pra-validasi SW-UCB vs UCB1 — SOP Tahap 0")
+    print("Pra-validasi SW-UCB vs UCB1, SOP Tahap 0")
     print(f"W={W_SIZE} xi={XI} iterasi={N_ITER} ganti_di={CHANGE_AT} "
           f"ulangan={a.ulangan}\n")
 
@@ -185,6 +242,8 @@ def main():
     print(teks_sw)
     print(teks_ucb)
     print()
+
+    uji_berpasangan(sw, ucb)
 
     # ---- kriteria lolos ----
     k1 = rata_sw is not None and rata_sw <= AMBANG_REKONV
@@ -227,7 +286,7 @@ def main():
             sumbu.set_ylabel("arm terpilih")
             sumbu.set_yticks(range(N_ARMS))
             sumbu.set_yticklabels([f"Arm {i+1}" for i in range(N_ARMS)])
-            sumbu.set_title(f"{judul} — satu contoh lintasan (bukan bukti)",
+            sumbu.set_title(f"{judul}: satu contoh lintasan (bukan bukti)",
                             fontsize=10)
             sumbu.legend(loc="center right", fontsize=8)
         ax1.set_xlabel("iterasi")
@@ -248,7 +307,7 @@ def main():
         ax2.set_xlabel("waktu re-konvergensi (iterasi)")
         ax2.set_ylabel("jumlah ulangan")
         ax2.set_title(f"Sebaran waktu re-konvergensi, {len(sw_ok)} ulangan "
-                      f"— inilah buktinya", fontsize=10)
+                      f"(inilah buktinya)", fontsize=10)
         ax2.legend(fontsize=8)
 
         fig.savefig(a.keluaran, dpi=150, bbox_inches="tight")
