@@ -8,7 +8,8 @@
 //   kolom gateway   isi pada program ini
 //   arm             arm yang dipakai (1..4), tetap 5 paket berturut-turut
 //   e_prev_mJ       arus RATA-RATA selama transmisi sebelumnya, dalam mA
-//   vbatt           tegangan bus INA219 saat siaga sebelum transmisi
+//   vbatt           tegangan bus INA219 TERENDAH selama transmisi sebelumnya (V)
+//                   (paket pertama: tegangan siaga)
 //   ax              arus PUNCAK selama transmisi sebelumnya, mA
 //   ay              jumlah cuplikan INA219 selama transmisi sebelumnya
 //   az              lama transmisi sebelumnya, 0,1 ms (satuan 100 us)
@@ -29,6 +30,7 @@ static const uint8_t CR[4] = {5, 5, 7, 8};
 
 static float    s_mean = 0, s_peak = 0, s_dur_ms = 0;
 static uint16_t s_n = 0;
+static float    s_vmin = 0;     // tegangan bus terendah selama transmisi sebelumnya
 static uint16_t s_seq = 0;
 
 void setup() {
@@ -64,7 +66,7 @@ void loop() {
             p.arm = (uint8_t)(a + 1);
             p.seq = s_seq++;
             p.e_prev_mJ = s_mean;              // arus rata-rata transmisi sebelumnya (mA)
-            p.vbatt_V = vbus;
+            p.vbatt_V = s_vmin > 0.0f ? s_vmin : vbus;
             p.ax = (int16_t)(s_peak + 0.5f);
             p.ay = (int16_t)s_n;
             p.az = (int16_t)(s_dur_ms * 10.0f + 0.5f);
@@ -79,7 +81,10 @@ void loop() {
             uint32_t n = 0;
             double jumlah = 0;
             float puncak = -1e9f;
+            float vmin = 99.0f;
             while (!LoRa.txDone() && (micros() - t0) < 500000UL) {
+                float v = ina.getBusVoltage_V();
+                if (v < vmin) vmin = v;
                 float x = ina.getCurrent_mA();
                 n++;
                 jumlah += x;
@@ -89,6 +94,7 @@ void loop() {
             s_n = (uint16_t)(n > 32000 ? 32000 : n);
             s_mean = n ? (float)(jumlah / n) : 0.0f;
             s_peak = n ? puncak : 0.0f;
+            s_vmin = vmin < 90.0f ? vmin : 0.0f;
         }
     }
 }

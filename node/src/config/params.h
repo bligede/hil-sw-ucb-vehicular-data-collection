@@ -92,8 +92,11 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // WAJIB diganti hasil pengukuran SOP Tahap 4.1 sebelum eksperimen utama.
 // Nilai awal di bawah adalah ESTIMASI dari topologi daya pada Panduan Perakitan
 // Subbab II.1 (baterai -> INA219 -> MT3608 5 V -> VIN).
-#define E_MAKS_mJ      113.3f
-#define E_MAKS_TERUKUR 0      // set 1 setelah diisi hasil Tahap 4.1
+// Hasil Tahap 4.1 (25 Okt 2026): Arm 4 = 93,1 sampai 93,7 mJ pada dua rekaman,
+// ketidakpastian sekitar 5 persen. USULAN, menunggu keputusan Pembimbing I
+// (lihat Laporan Hasil Tahap 4.1). Dipakai untuk uji laboratorium Tahap 4.3.
+#define E_MAKS_mJ      93.7f
+#define E_MAKS_TERUKUR 1      // 1 = nilai hasil ukur Tahap 4.1
 
 #define REWARD_TIMEOUT (-1.0f) // penalti bila ACK tidak diterima; konsisten
                                // dengan batas bawah rentang reward [-1, +1]
@@ -131,9 +134,18 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // ============================================================
 #define TIMEOUT_WINDOW_MS 240000UL // D9: 240 s; T_max terpanjang S3 = 216 s
 #define COOLDOWN_MS        60000UL // D9: jeda sebelum boleh masuk ulang
-#define V_BATT_MIN         3.30f   // masuk BATTERY_GUARD
-#define V_BATT_PULIH       3.50f   // keluar dari BATTERY_GUARD
-#define GUARD_SLEEP_S      3600ULL // tidur panjang saat baterai kritis
+#ifdef UJI_GUARD
+  // HANYA untuk uji meja Tahap 4.4 (env uji_guard): ambang dinaikkan di atas
+  // tegangan baterai penuh supaya masuk dan keluar guard terlihat tanpa
+  // catu daya variabel. Menguji logika, bukan angka 3,3 V dan 3,5 V.
+  #define V_BATT_MIN         4.10f
+  #define V_BATT_PULIH       4.00f
+  #define GUARD_SLEEP_S      10ULL
+#else
+  #define V_BATT_MIN         3.30f   // masuk BATTERY_GUARD
+  #define V_BATT_PULIH       3.50f   // keluar dari BATTERY_GUARD
+  #define GUARD_SLEEP_S      3600ULL // tidur panjang saat baterai kritis
+#endif
 
 // Jeda antar-paket di dalam CONTACT_WINDOW (D7).
 // Panduan HIL tidak menetapkan jeda sama sekali, sehingga node memancar hampir

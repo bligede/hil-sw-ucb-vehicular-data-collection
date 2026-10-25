@@ -50,8 +50,16 @@ SKEN = {
 
 def baca(berkas, windows):
     """Kumpulkan kejadian per id_window menurut urutan baris pada berkas."""
-    with open(berkas, newline="", encoding="utf-8") as f:
-        for b in csv.DictReader(f):
+    with open(berkas, newline="", encoding="utf-8", errors="replace") as f:
+        baris = f.read().splitlines()
+    # Rekaman serial sering diawali baris boot ESP32 sebelum kepala CSV. Mulai
+    # dari kepala pertama; kepala yang berulang (gateway restart) menghasilkan
+    # baris dengan jenis "jenis" yang dilewati di bawah.
+    awal = next((i for i, l in enumerate(baris) if l.startswith("jenis,")), None)
+    if awal is None:
+        return
+    if True:
+        for b in csv.DictReader(baris[awal:]):
             jenis = (b.get("jenis") or "").strip()
             wid = (b.get("id_window") or "").strip()
             if not wid or wid == "BELUM-DISET":
