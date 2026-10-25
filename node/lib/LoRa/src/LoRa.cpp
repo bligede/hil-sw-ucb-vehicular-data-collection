@@ -216,6 +216,20 @@ bool LoRaClass::isTransmitting()
   return false;
 }
 
+// Tambahan lokal (23 Okt 2026): true bila flag TxDone sudah menyala, lalu
+// membersihkannya. Dipakai untuk menunggu selesainya endPacket(true) tanpa
+// bergantung pada RegOpMode: tepat sesudah perintah kirim, RegOpMode sesaat
+// masih terbaca standby (0x81) atau FSTx (0x82), sehingga isTransmitting()
+// mengembalikan false dan loop pencuplikan energi berhenti sebelum transmisi.
+bool LoRaClass::txDone()
+{
+  if (readRegister(REG_IRQ_FLAGS) & IRQ_TX_DONE_MASK) {
+    writeRegister(REG_IRQ_FLAGS, IRQ_TX_DONE_MASK);
+    return true;
+  }
+  return false;
+}
+
 int LoRaClass::parsePacket(int size)
 {
   int packetLength = 0;

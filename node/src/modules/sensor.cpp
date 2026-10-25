@@ -7,6 +7,9 @@ static const uint8_t REG_DEVID       = 0x00;
 static const uint8_t REG_POWER_CTL   = 0x2D;
 static const uint8_t REG_DATA_FORMAT = 0x31;
 static const uint8_t REG_DATAX0      = 0x32;
+static const uint8_t REG_OFSX        = 0x1E;
+static const uint8_t REG_OFSY        = 0x1F;
+static const uint8_t REG_OFSZ        = 0x20;
 static const uint8_t DEVID_ADXL345   = 0xE5;
 
 // Rentang +-16 g pada resolusi penuh: 3,9 mg per LSB (Naskah Tabel 2.3)
@@ -37,6 +40,9 @@ bool sensor_init() {
     if (id != DEVID_ADXL345) return false;
 
     if (!tulis_reg(REG_DATA_FORMAT, 0x0B)) return false;  // +-16 g, resolusi penuh
+    if (!tulis_reg(REG_OFSX, (uint8_t)(int8_t)ADXL345_OFS_X)) return false;
+    if (!tulis_reg(REG_OFSY, (uint8_t)(int8_t)ADXL345_OFS_Y)) return false;
+    if (!tulis_reg(REG_OFSZ, (uint8_t)(int8_t)ADXL345_OFS_Z)) return false;
     if (!tulis_reg(REG_POWER_CTL,   0x08)) return false;  // mode ukur
     return true;
 }

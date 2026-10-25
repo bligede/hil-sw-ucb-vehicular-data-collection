@@ -73,6 +73,8 @@ static void cetak_parameter() {
                    (unsigned long)JEDA_ANTAR_PAKET_MS);
     Serial.printf ("  timeout_window=%lums cooldown=%lums\n",
                    (unsigned long)TIMEOUT_WINDOW_MS, (unsigned long)COOLDOWN_MS);
+    Serial.printf ("  ADXL345 offset OFS x=%d y=%d z=%d (15,6 mg/LSB)\n",
+                   (int)ADXL345_OFS_X, (int)ADXL345_OFS_Y, (int)ADXL345_OFS_Z);
     Serial.printf ("  cuplik_saat_tx=%d  ack_tiap=%d paket\n",
                    ENERGI_CUPLIK_SAAT_TX, ACK_SETIAP_N);
     for (int a = 0; a < N_ARMS; a++) {

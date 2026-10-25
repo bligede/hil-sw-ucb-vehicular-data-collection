@@ -74,8 +74,15 @@ float radio_kirim_paket(const Payload& p) {
     // Inilah yang memungkinkan pencuplikan arus berlangsung SELAMA transmisi
     // (penyimpangan D1). Tanpa mode ini, energi terbaca adalah arus siaga.
     LoRa.endPacket(true);
-    while (LoRa.isTransmitting()) {
-        energy_sample();
+    // Menunggu flag TxDone, bukan isTransmitting(): tepat sesudah perintah kirim
+    // RegOpMode sesaat belum berpindah ke TX, sehingga isTransmitting() false
+    // dan tidak ada satu pun cuplikan yang terambil. Batas 500 ms mencegah
+    // loop menggantung bila TxDone tidak pernah menyala (waktu udara <= 150 ms).
+    {
+        const uint32_t t_mulai_tx = millis();
+        while (!LoRa.txDone() && (millis() - t_mulai_tx) < 500UL) {
+            energy_sample();
+        }
     }
 #else
     // Perilaku lama Panduan HIL, disediakan hanya sebagai pembanding pada

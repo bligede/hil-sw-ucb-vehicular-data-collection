@@ -152,7 +152,7 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // tunggal 12-bit (532 us), bukan rata-rata 128 cuplikan (68 ms) yang lebih
 // panjang daripada sebagian waktu udara.
 #define ENERGI_CUPLIK_SAAT_TX 1   // 0 = perilaku lama Panduan (untuk pembanding)
-#define ENERGI_MAKS_SAMPEL  400   // batas atas cuplikan per transmisi
+#define ENERGI_MAKS_SAMPEL  600   // batas atas cuplikan per transmisi (Arm 4 butuh sekitar 540)
 
 // ============================================================
 // 6. Muatan paket (Dokumen Revisi + Panduan Perakitan, D6)

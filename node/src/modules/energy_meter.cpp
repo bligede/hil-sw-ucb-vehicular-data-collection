@@ -28,7 +28,7 @@ bool energy_init() {
     // Konversi tunggal 12-bit = 532 us. Lihat catatan D1 pada header.
     ina219.setADCMode(INA219_BIT_MODE_12);
     ina219.setMeasureMode(INA219_CONTINUOUS);
-    ina219.setShuntSizeInOhms(0.1f);
+    ina219.setShuntSizeInOhms(INA219_SHUNT_OHM);   // hasil kalibrasi, lihat pin_map.h
 
     s_vbus_V = ina219.getBusVoltage_V();
     return true;

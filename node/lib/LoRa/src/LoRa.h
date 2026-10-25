@@ -2,12 +2,12 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 //
 // Salinan lokal, ditempatkan di lib/ node (bukan diambil dari registry lewat
-// lib_deps) karena satu patch minimal: isTransmitting() dipindah dari private
-// ke public, tanpa mengubah isinya sama sekali (lihat src/LoRa.cpp, tidak
-// disentuh). Metode ini hanya membaca register OP_MODE dan IRQ_FLAGS lewat
-// SPI -- tidak memakai interrupt, tidak mengubah state radio kecuali
-// membersihkan bit TX_DONE saat true, persis efek samping yang sudah terjadi
-// di endPacket() versi blocking pada pustaka aslinya.
+// lib_deps) karena dua perubahan kecil: (1) isTransmitting() dipindah dari
+// private ke public tanpa mengubah isinya, dan (2) metode baru txDone() yang
+// membaca flag TxDone di RegIrqFlags (lihat catatan di src/LoRa.cpp). Keduanya
+// hanya membaca register lewat SPI -- tidak memakai interrupt, tidak mengubah
+// state radio kecuali membersihkan bit TX_DONE, persis efek samping yang sudah
+// terjadi di endPacket() versi blocking pada pustaka aslinya.
 //
 // Alasan tidak dipakai onTxDone()+attachInterrupt() sebagai gantinya: seluruh
 // firmware node ini murni polling (radio_scan_beacon, radio_tunggu_ack di
@@ -112,6 +112,9 @@ public:
   // Dipindah dari private ke public (lihat catatan berkas di atas). Isinya
   // tidak diubah: bool isTransmitting() apa adanya dari pustaka asli.
   bool isTransmitting();
+
+  // Tambahan lokal: true bila TxDone sudah menyala (dan membersihkannya).
+  bool txDone();
 
 private:
   void explicitHeaderMode();
