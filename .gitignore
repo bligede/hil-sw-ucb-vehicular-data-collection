@@ -29,3 +29,6 @@ data/
 Thumbs.db
 .DS_Store
 desktop.ini
+
+# Kredensial hotspot dan token web app; jangan pernah di-commit.
+secrets.h
