@@ -64,8 +64,12 @@ dan CR.
 node/                   firmware node sensor statis
   src/config/           pin_map.h, params.h, protocol.h
   src/modules/          SW_UCB_Agent, energy_meter, radio, sensor, fsm, payload
+  uji/                  program uji laboratorium Tahap 4 (bukan firmware penelitian)
+  lib/LoRa/             salinan lokal pustaka LoRa dengan dua perubahan kecil
 gateway/                firmware mobile gateway
+  src/modules/          unggah_sheets, tampilan_lcd, indikator_led
   apps_script/          penerima Google Sheets (Code.gs) dan petunjuk pemasangannya
+docs/                   DOKUMENTASI_FIRMWARE.md: arsitektur, protokol, parameter, penyimpangan D1-D19
 tools/
   prevalidasi_swucb.py  validasi SW-UCB vs UCB1 sebelum firmware ditulis
   ringkas_log.py        peringkas log paket menjadi baris contact window
