@@ -65,6 +65,7 @@ node/                   firmware node sensor statis
   src/config/           pin_map.h, params.h, protocol.h
   src/modules/          SW_UCB_Agent, energy_meter, radio, sensor, fsm, payload
 gateway/                firmware mobile gateway
+  apps_script/          penerima Google Sheets (Code.gs) dan petunjuk pemasangannya
 tools/
   prevalidasi_swucb.py  validasi SW-UCB vs UCB1 sebelum firmware ditulis
   ringkas_log.py        peringkas log paket menjadi baris contact window
@@ -108,6 +109,10 @@ terpisah dan harus dibuka di jendela berbeda.
 cd node     && pio run -t upload -t monitor
 cd gateway  && pio run -t upload -t monitor
 ```
+
+Gateway punya dua env. `esp32dev` mencetak CSV ke serial seperti biasa. `esp32dev_sheets`
+menambah unggahan ke Google Sheets lewat hotspot ponsel, sehingga laptop tidak perlu
+dibawa saat lintasan; pemasangannya ada di `gateway/apps_script/README.md`.
 
 Sebelum menulis firmware, jalankan pra-validasi algoritmanya:
 
