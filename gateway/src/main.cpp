@@ -80,6 +80,8 @@ static char     id_window[32] = "BELUM-DISET";
 // jumlah penerimaan. Nomor urut sudah dibawa pada muatan paket, sehingga node
 // tidak perlu diubah.
 static uint16_t seq_awal = 0;           // nomor urut paket pertama pada jendela
+static uint16_t seq_lalu = 0;           // nomor urut paket diterima sebelumnya
+static bool     ada_seq_lalu = false;   // sudah ada paket sejak gateway menyala
 
 // Keadaan terakhir yang ditampilkan pada LCD.
 static bool     ada_paket = false;
@@ -211,7 +213,7 @@ void setup() {
     lcd_pesan("Gateway siap", "Menunggu node...", "", "");
 
     indikator_uji();
-    Serial.println("# gateway-1.1 siap. Perintah: 'W <id_window>', 'S', 'L [detik]'");
+    Serial.println("# gateway-1.2 siap. Perintah: 'W <id_window>', 'S', 'L [detik]'");
     cetak_header_csv();
 }
 
@@ -297,6 +299,16 @@ void loop() {
     int16_t ax = (int16_t)((uint16_t)buf[6]  << 8 | buf[7]);
     int16_t ay = (int16_t)((uint16_t)buf[8]  << 8 | buf[9]);
     int16_t az = (int16_t)((uint16_t)buf[10] << 8 | buf[11]);
+
+    // Reset agen pada node (tombol BOOT atau boot dingin) mengembalikan nomor urut ke
+    // nol. Nomor urut yang turun ke rentang 0..9 dari nilai di luar rentang itu dan
+    // di luar ujung putaran 16 bit ditandai di log, supaya awal tiap skenario terbaca.
+    if (ada_seq_lalu && seq < ACK_SETIAP_N && seq_lalu >= ACK_SETIAP_N && seq_lalu < 65526U) {
+        Serial.printf("# NODE_RESET seq_sebelum=%u seq_baru=%u id_window=%s\n",
+                      (unsigned)seq_lalu, (unsigned)seq, id_window);
+    }
+    seq_lalu = seq;
+    ada_seq_lalu = true;
 
     if (n_diterima == 0) seq_awal = seq;   // paket pertama pada jendela ini
     n_diterima++;

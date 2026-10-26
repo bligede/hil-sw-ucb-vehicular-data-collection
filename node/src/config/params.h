@@ -52,7 +52,7 @@
 // 1. Ruang aksi SW-UCB (Naskah 4.1.1, tidak berubah)
 // ============================================================
 #define N_ARMS        4
-#define W_SIZE       50    // ukuran sliding window (transmisi)
+#define W_SIZE       50    // ukuran sliding window (observasi per arm; satu observasi = satu siklus ACK)
 #define XI            0.5f // parameter eksplorasi
 
 // Arm: {TP dBm, CR (5..8 untuk 4/5..4/8)}
@@ -192,6 +192,18 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
   #define MODE_SW_UCB 0
 #endif
 
+// Satuan keputusan agen (catatan Pembimbing I butir A.1, 26 Okt 2026).
+// Naskah Bab III menetapkan satuan pengamatan agen adalah siklus ACK: satu keputusan,
+// sepuluh paket dengan arm yang sama, satu reward. Karena itu select_arm() dipanggil
+// sekali pada paket pertama tiap siklus, sehingga t, N, dan W semuanya berhitung dalam
+// siklus. Firmware 1.0 memanggilnya pada setiap paket: t naik sepuluh per siklus dan
+// ln(min(t, W)) sudah jenuh di W pada siklus ke-5, padahal N dan W berhitung dalam
+// siklus. Hasil uji replay: tools/replay_swucb.py.
+// Aktifkan -DT_PER_PAKET hanya untuk mereproduksi log firmware 1.0.
+#ifndef T_PER_PAKET
+  #define T_PER_PAKET 0
+#endif
+
 // Mode sweep: lintasan eksplorasi tambahan (keputusan Pembimbing I, 27 Sep 2026).
 // Arm TIDAK dipilih agen, melainkan bergiliran Arm 1, 2, 3, 4 per siklus ACK,
 // sehingga setiap arm memperoleh siklus yang hampir sama banyak. Dipakai hanya
@@ -215,10 +227,10 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // 8. Penanda kompilasi
 // ============================================================
 #if MODE_SWEEP_AKTIF
-  #define FW_VERSI    "node-1.0-sweep"
+  #define FW_VERSI    "node-1.1-sweep"
 #elif MODE_SW_UCB
-  #define FW_VERSI    "node-1.0-swucb"
+  #define FW_VERSI    "node-1.1-swucb"
 #else
-  #define FW_VERSI    "node-1.0-ucb1"
+  #define FW_VERSI    "node-1.1-ucb1"
 #endif
 #define SERIAL_BAUD   115200

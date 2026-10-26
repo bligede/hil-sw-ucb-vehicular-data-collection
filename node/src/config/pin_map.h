@@ -27,6 +27,11 @@
 
 #define INA219_ADDR   0x40 // A0 dan A1 ke GND (Panduan HIL 1.3)
 
+// ---------- Tombol reset agen ----------
+// Tombol BOOT bawaan papan (GPIO0). Ditahan saat node bangun dari tidur, tombol ini
+// mengembalikan seluruh keadaan belajar ke nol (lihat reset_keadaan_agen di main.cpp).
+#define PIN_RESET_AGEN 0
+
 // Hambatan shunt efektif INA219 hasil kalibrasi Tahap 4.1 (23 Okt 2026).
 // Beban resistor 390, 330, dan 390//330 ohm terukur 10,40, 12,37, dan 22,68 mA
 // (tegangan Fluke 15B+ dibagi nilai resistor terukur). Dengan 0,100 ohm,

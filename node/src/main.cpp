@@ -96,6 +96,35 @@ static void cetak_parameter() {
     Serial.println("=====================================================");
 }
 
+// Kembalikan seluruh keadaan belajar ke nol. Nomor urut paket ikut kembali ke nol,
+// sehingga paket pertama sesudah reset bernomor 0 dan terbaca di log gateway sebagai
+// lompatan nomor urut ke bawah (gateway mencetak baris "# NODE_RESET"). Dengan itu
+// setiap rekaman dapat dipastikan berangkat dari keadaan awal yang sama (A.1).
+static void reset_keadaan_agen(const char* sebab) {
+    Serial.printf("RESET AGEN sebab=\"%s\": t, N, isi window, seq, penghitung ACK = 0\n", sebab);
+    agent.reset();
+    rtc_pkt_seq           = 0;
+    rtc_ack_counter       = 0;
+    rtc_energi_akum_mJ    = 0.0;
+    rtc_e_prev_mJ         = 0.0f;
+    rtc_arm_sekarang      = 0;
+    rtc_cooldown_sampai_s = 0;
+    rtc_uptime_s          = 0;
+    rtc_sweep_arm         = 0;
+    rtc_penanda_sah       = PENANDA_SAH;
+}
+
+// Operator menahan tombol BOOT (GPIO0) di antara dua skenario. Node bangun dari tidur
+// tiap T_SLEEP_S detik, jadi tombol perlu ditahan sedikit lebih lama dari itu. Tombol
+// ini tidak berpengaruh pada boot dingin (di sana BOOT berarti mode unggah). Dibaca dua
+// kali berjarak 50 ms agar sentuhan sesaat tidak menghapus pembelajaran.
+static bool reset_diminta_operator() {
+    pinMode(PIN_RESET_AGEN, INPUT_PULLUP);
+    if (digitalRead(PIN_RESET_AGEN) != LOW) return false;
+    delay(50);
+    return digitalRead(PIN_RESET_AGEN) == LOW;
+}
+
 static void henti_fatal(const char* pesan) {
     // Kegagalan periferal tidak boleh berlanjut diam-diam: data yang terekam
     // sesudahnya akan tampak sah padahal tidak. Node dihentikan dan alasannya
@@ -125,16 +154,9 @@ void setup() {
 
     // Nyalakan pertama kali, atau RTC RAM rusak: mulai pembelajaran dari nol.
     if (rtc_penanda_sah != PENANDA_SAH) {
-        Serial.println("RTC RAM kosong atau rusak -> reset keadaan agen");
-        agent.reset();
-        rtc_pkt_seq           = 0;
-        rtc_ack_counter       = 0;
-        rtc_energi_akum_mJ    = 0.0;
-        rtc_e_prev_mJ         = 0.0f;
-        rtc_cooldown_sampai_s = 0;
-        rtc_uptime_s          = 0;
-        rtc_sweep_arm         = 0;
-        rtc_penanda_sah       = PENANDA_SAH;
+        reset_keadaan_agen("RTC RAM kosong atau rusak");
+    } else if (reset_diminta_operator()) {
+        reset_keadaan_agen("tombol BOOT ditahan");
     } else if (bangun_dari_sleep) {
         Serial.printf("Bangun: t=%lu seq=%u vbatt=%.2fV\n",
                       (unsigned long)rtc_t_global, (unsigned)rtc_pkt_seq,

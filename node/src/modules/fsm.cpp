@@ -59,8 +59,15 @@ static void kirim_satu_paket() {
 #if MODE_SWEEP_AKTIF
     // Arm tetap sepanjang satu siklus ACK; berganti di evaluasi_reward().
     uint8_t arm_idx = rtc_sweep_arm;
-#else
+#elif T_PER_PAKET
+    // Perilaku firmware 1.0, hanya untuk mereproduksi log lama: satu keputusan per paket.
     uint8_t arm_idx = agent.select_arm();
+#else
+    // Satu keputusan per siklus ACK (naskah Bab III): arm dipilih pada paket pertama
+    // siklus dan dipakai sepuluh paket, sehingga t naik satu per siklus. rtc_ack_counter
+    // bernilai nol pada paket pertama setelah evaluasi reward, masuk window, maupun
+    // keluar karena timeout_window.
+    uint8_t arm_idx = (rtc_ack_counter == 0) ? agent.select_arm() : rtc_arm_sekarang;
 #endif
     rtc_arm_sekarang = arm_idx;
 

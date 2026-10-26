@@ -3,7 +3,7 @@
 Arsitektur Edge-AI untuk Kendali Transmisi Otonom LoRa pada Pengumpulan Data Kendaraan: Implementasi Algoritma Sliding-Window Upper Confidence Bound pada Kanal Non-Stasioner Kendaraan.
 
 Penulis: I Gede Wahyu Wiranata (NIM 2481711013), Magister Teknik Elektro, Universitas Udayana.
-Versi firmware: node-1.0-swucb, node-1.0-ucb1, node-1.0-sweep, dan gateway-1.1. Tanggal dokumen: 25 Oktober 2026.
+Versi firmware: node-1.1-swucb, node-1.1-ucb1, node-1.1-sweep, dan gateway-1.2. Tanggal dokumen: 26 Oktober 2026. Perubahan dari 1.0: satuan keputusan agen per siklus ACK, reset agen lewat tombol BOOT, dan baris NODE_RESET pada log gateway.
 
 ## 1. Ikhtisar sistem
 
@@ -138,6 +138,8 @@ jenis,ts_ms,id_window,seq,arm,e_prev_mJ,vbatt,rssi,snr,ax,ay,az
 | rssi, snr | RSSI (dBm) dan SNR (dB) paket di gateway |
 | ax, ay, az | percepatan, mg |
 
+Baris berawalan `#` adalah komentar dan dilewati `olah_siklus.py`. Gateway 1.2 mencetak `# NODE_RESET seq_sebelum=... seq_baru=... id_window=...` ketika nomor urut paket turun ke 0 sampai 9 dari nilai di luar rentang itu (kecuali pada putaran 16 bit, 65526 ke atas). Baris ini menandai reset agen pada node, sehingga rekaman yang sah berangkat dari paket bernomor 0.
+
 ### 4.5 Aturan penutupan jendela ACK
 
 Gateway menutup jendela dan mengirim ACK bila rentang nomor urut paket mencapai sepuluh (selisih `seq - seq_awal >= 9`), berapa pun paket yang benar-benar tiba. Bila paket terakhir hilang, jendela ditutup paksa setelah 800 ms tanpa paket. Dengan cara ini kehilangan paket tetap tampak pada PDR (penyimpangan D16).
@@ -210,6 +212,10 @@ I(a, t) = mu(a, W) + XI * sqrt( ln( min(t, W) ) / N(a, W) )
 ```
 
 dengan `mu` rata-rata reward di dalam jendela, `N` jumlah entri sah di dalam jendela, `W = 50`, dan `XI = 0,5`. Arm yang belum pernah dicoba mendapat skor tak hingga, sehingga dicoba lebih dulu. Pada `t < 2` bonus eksplorasi ditiadakan. `update()` menulis reward ke buffer melingkar (entri terlama tertimpa bila penuh) dan menghitung ulang rata-rata dari isi buffer, bukan secara inkremental, agar penimpaan tidak meninggalkan akumulasi error. `select_arm()` memilih skor tertinggi lalu menaikkan `t`.
+
+Satuan keputusan (firmware 1.1, butir A.1 catatan Pembimbing I): `select_arm()` dipanggil sekali pada paket pertama tiap siklus ACK dan arm yang sama dipakai sepuluh paket, sehingga `t`, `N`, dan `W` semuanya berhitung dalam siklus ACK, sesuai satuan pengamatan agen pada naskah Bab III. Firmware 1.0 memanggilnya pada setiap paket, sehingga `t` naik sepuluh per siklus dan `ln(min(t, W))` sudah jenuh pada siklus ke-5. Saklar kompilasi `-DT_PER_PAKET` mengembalikan perilaku 1.0 untuk mereproduksi log lama. Jendela `W` berlaku per arm: buffer melingkar 50 reward per arm, satu reward per siklus.
+
+Reset keadaan agen (`reset_keadaan_agen()` di `main.cpp`) mengembalikan `t`, `N`, isi window, nomor urut paket, penghitung ACK, akumulasi energi, dan giliran sweep ke nol. Dua pemicunya: boot dingin (RTC RAM kosong atau rusak) dan tombol BOOT (GPIO0) yang ditahan saat node bangun dari tidur IDLE, yaitu lebih lama dari `T_SLEEP_S`. Node mencetak baris `RESET AGEN sebab=...`. Karena nomor urut ikut kembali ke nol, awal tiap skenario terbaca di log gateway sebagai baris `# NODE_RESET` (lihat 4.4).
 
 Mode UCB1 (pembanding) memakai rata-rata kumulatif dan `ln(t)` tanpa batas jendela; hanya itu perbedaannya, supaya selisih hasil murni berasal dari jendela geser.
 
@@ -371,6 +377,7 @@ Env `uji_guard` tidak memakai program tersendiri: ia mengompilasi firmware produ
 |---|---|
 | `prevalidasi_swucb.py` | pra-validasi SW-UCB terhadap UCB1 di Python sebelum firmware (Tahap 0): re-konvergensi, uji berpasangan, selang kepercayaan bootstrap |
 | `olah_siklus.py` | mengolah log gateway per siklus ACK dan per contact window: reward per siklus, cakupan arm per skenario, tegangan bus per window; menandai arm yang datanya tipis |
+| `replay_swucb.py` | uji replay SW-UCB: memberi agen acuan (kelas `SWUCB` pada `prevalidasi_swucb.py`) arm dan reward yang dialami node pada satu log gateway, lalu membandingkan arm pilihannya dengan arm di log, per paket (firmware 1.0) dan per siklus (firmware 1.1). Rekaman yang tidak dimulai dari paket bernomor 0 ditandai sebagai uji bersyarat |
 | `ringkas_log.py` | meringkas log paket menjadi satu baris per ID window untuk sheet 04 buku kerja, dengan koreksi pergeseran energi satu paket dan rekonstruksi paket hilang |
 | `buat_diagram.py`, `buat_gambar_jurnal.py`, `buat_gambar_slide.py` | membangkitkan diagram alur untuk naskah, artikel jurnal, dan slide |
 | `diagnosa_spi_lora.py` | membaca register SX127x lewat akses GPIO sementara pada ROM loader ESP32, untuk mendiagnosis sambungan SPI tanpa memasang firmware |
