@@ -46,6 +46,45 @@ from collections import Counter, OrderedDict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import prevalidasi_swucb as pv  # noqa: E402
 
+
+class AgenLama:
+    """Agen firmware 1.0 dan 1.1: window 50 reward per arm, xi di luar akar.
+
+    Dipertahankan hanya untuk mereproduksi log yang direkam dengan firmware itu
+    (Tahap 4.3 sebelum 1 Nov 2026). Agen yang sesuai naskah adalah pv.SWUCB."""
+
+    def __init__(self, w=pv.W_SIZE):
+        self.w = w
+        self.buf = [[] for _ in range(pv.N_ARMS)]
+        self.t = 0
+
+    def score(self, a):
+        b = self.buf[a]
+        if not b:
+            return math.inf
+        mu = sum(b) / len(b)
+        c = min(self.t, self.w)
+        if c < 2:
+            return mu
+        return mu + pv.XI * math.sqrt(math.log(c) / len(b))
+
+    def select(self):
+        best, best_s = 0, -math.inf
+        for a in range(pv.N_ARMS):
+            s_ = self.score(a)
+            if s_ > best_s:
+                best_s, best = s_, a
+        self.t += 1
+        return best
+
+    def update(self, a, r):
+        self.buf[a].append(r)
+        self.buf[a] = self.buf[a][-self.w:]
+
+
+AGEN = {"lama": AgenLama, "naskah": pv.SWUCB}
+KELAS_AGEN = AgenLama
+
 ACK_N = 10
 JEDA_COOLDOWN_MS = 30000
 
@@ -201,7 +240,7 @@ def replay(siklus, n_awal, e_tipikal, pdr_awal=1.0, skala_e=1.0, cara="per_paket
            e_maks=93.7):
     """Replay teacher-forced. Mengembalikan n_awal entri rekonstruksi start dingin,
     lalu satu entri per siklus teramati."""
-    ag = pv.SWUCB()
+    ag = KELAS_AGEN()
     hasil = []
     for c in range(n_awal):
         keputusan, mg = putuskan(ag, ACK_N, cara)
@@ -238,7 +277,7 @@ def simulasi_bebas(reward_arm, n_siklus, cara, reward_awal=None, lewati=0):
     """Agen berjalan sendiri dengan reward tetap per arm. reward_awal: {siklus: (indeks_arm,
     reward)} menimpa reward pada siklus tertentu bila arm yang terpilih sama. Mengembalikan
     jumlah pilihan per arm setelah `lewati` siklus awal."""
-    ag = pv.SWUCB()
+    ag = KELAS_AGEN()
     hit = Counter()
     for c in range(n_siklus):
         if cara == "per_paket":
@@ -395,8 +434,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("berkas", help="log mentah gateway (CSV)")
     ap.add_argument("--e-maks", type=float, default=93.7)
+    ap.add_argument("--agen", choices=sorted(AGEN), default="lama",
+                    help="lama: agen firmware 1.0/1.1 (log sebelum 1 Nov 2026); naskah: Persamaan 2.5-2.6 "
+                         "(firmware 1.2). Log firmware 1.2 sebaiknya diuji dengan replay_indeks.py")
     ap.add_argument("--keluaran", help="tulis tabel per siklus (CSV); akhiran _segN bila ada NODE_RESET")
     a = ap.parse_args()
+    global KELAS_AGEN
+    KELAS_AGEN = AGEN[a.agen]
+    print("Agen acuan:", a.agen)
 
     segmen = bagi_segmen(baca_log(a.berkas))
     print("Segmen (dipisah oleh baris # NODE_RESET):", len(segmen))

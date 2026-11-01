@@ -3,7 +3,7 @@
 Arsitektur Edge-AI untuk Kendali Transmisi Otonom LoRa pada Pengumpulan Data Kendaraan: Implementasi Algoritma Sliding-Window Upper Confidence Bound pada Kanal Non-Stasioner Kendaraan.
 
 Penulis: I Gede Wahyu Wiranata (NIM 2481711013), Magister Teknik Elektro, Universitas Udayana.
-Versi firmware: node-1.1-swucb, node-1.1-ucb1, node-1.1-sweep, dan gateway-1.2. Tanggal dokumen: 26 Oktober 2026. Perubahan dari 1.0: satuan keputusan agen per siklus ACK, reset agen lewat tombol BOOT, dan baris NODE_RESET pada log gateway.
+Versi firmware: node-1.2-swucb, node-1.2-ucb1, node-1.2-sweep, dan gateway-1.3. Tanggal dokumen: 1 November 2026. Perubahan dari 1.1: agen mengikuti Persamaan 2.5 dan 2.6 (window bersama, xi di dalam akar), node mencetak indeks tiap keputusan, gateway tidak lagi mengosongkan pencacah saat ID window berganti, mencetak # GATEWAY_BOOT, dan ACK_IDLE_MS 1400 ms untuk uji laboratorium.
 
 ## 1. Ikhtisar sistem
 
@@ -66,6 +66,7 @@ Alat yang dipakai adalah PlatformIO dengan framework Arduino untuk ESP32. Node d
 | node | `uji_tx_arus`, `uji_tx_radio` | uji pencuplikan arus selama transmisi |
 | node | `uji_rtc_ram`, `uji_rtc_60s`, `uji_rtc_3600s` | uji persistensi RTC RAM (Tahap 4.2) |
 | node | `uji_guard` | uji logika BATTERY_GUARD (Tahap 4.4) |
+| node | `uji_agen`, `uji_agen_ucb1` | uji unit agen dengan riwayat hitung tangan |
 | gateway | `esp32dev` | gateway dengan keluaran serial |
 | gateway | `esp32dev_sheets` | gateway dengan unggah ke Google Sheets |
 
@@ -142,7 +143,7 @@ Baris berawalan `#` adalah komentar dan dilewati `olah_siklus.py`. Gateway 1.2 m
 
 ### 4.5 Aturan penutupan jendela ACK
 
-Gateway menutup jendela dan mengirim ACK bila rentang nomor urut paket mencapai sepuluh (selisih `seq - seq_awal >= 9`), berapa pun paket yang benar-benar tiba. Bila paket terakhir hilang, jendela ditutup paksa setelah 800 ms tanpa paket. Dengan cara ini kehilangan paket tetap tampak pada PDR (penyimpangan D16).
+Gateway menutup jendela dan mengirim ACK bila rentang nomor urut paket mencapai sepuluh (selisih `seq - seq_awal >= 9`), berapa pun paket yang benar-benar tiba. Bila paket terakhir hilang, jendela ditutup paksa setelah `ACK_IDLE_MS` tanpa paket: 1400 ms sejak gateway 1.3 (800 ms sebelumnya, yang menghasilkan ACK dini bila satu paket hilang di tengah siklus). Dengan cara ini kehilangan paket tetap tampak pada PDR (penyimpangan D16). Nilai 1400 ms hanya untuk uji laboratorium; dua paket hilang berturut-turut atau tiga paket terakhir hilang masih menghasilkan ACK yang salah, sehingga sebelum Tahap 4.6 penutupan siklus akan berbasis posisi paket di dalam siklus dan ACK membawa penanda siklus. Perintah `W` dan ID dari Sheets tidak menyentuh pencacah siklus; ID baru berlaku pada siklus berikutnya.
 
 ### 4.6 Perintah serial gateway (115200 baud)
 
@@ -205,19 +206,23 @@ Kepergian kendaraan dideteksi pada evaluasi ACK, tanpa pemindaian beacon tambaha
 
 ### 5.3 Agen SW-UCB (SW_UCB_Agent.cpp)
 
-Agen memegang penunjuk ke `ArmState` di RTC RAM. Skor tiap arm pada mode SW-UCB:
+Agen memegang penunjuk ke `AgentState` di RTC RAM. Skor tiap arm pada mode SW-UCB, Persamaan 2.5 dan 2.6 naskah (Garivier dan Moulines, 2011):
 
 ```
-I(a, t) = mu(a, W) + XI * sqrt( ln( min(t, W) ) / N(a, W) )
+I(a, t) = mu(a, t, W) + sqrt( XI * ln( min(t, W) ) / N(a, t, W) )
 ```
 
-dengan `mu` rata-rata reward di dalam jendela, `N` jumlah entri sah di dalam jendela, `W = 50`, dan `XI = 0,5`. Arm yang belum pernah dicoba mendapat skor tak hingga, sehingga dicoba lebih dulu. Pada `t < 2` bonus eksplorasi ditiadakan. `update()` menulis reward ke buffer melingkar (entri terlama tertimpa bila penuh) dan menghitung ulang rata-rata dari isi buffer, bukan secara inkremental, agar penimpaan tidak meninggalkan akumulasi error. `select_arm()` memilih skor tertinggi lalu menaikkan `t`.
+`t` adalah jumlah keputusan sejak reset agen terakhir; satu keputusan adalah satu siklus ACK (`select_arm()` dipanggil sekali pada paket pertama tiap siklus). Window satu untuk semua arm dan bergeser bersama `t`: `N(a, t, W)` dan `mu(a, t, W)` dihitung dari entri milik keputusan nomor `t - W + 1` sampai `t`, dengan `W = 50` dan `XI = 0,5`. Entri disimpan sebagai pasangan nomor keputusan, arm, dan reward di buffer melingkar 50 slot; entri yang nomornya sudah di luar window disaring, bukan dihapus. Siklus yang diputus timeout_window menaikkan `t` tanpa menambah entri.
 
-Satuan keputusan (firmware 1.1, butir A.1 catatan Pembimbing I): `select_arm()` dipanggil sekali pada paket pertama tiap siklus ACK dan arm yang sama dipakai sepuluh paket, sehingga `t`, `N`, dan `W` semuanya berhitung dalam siklus ACK, sesuai satuan pengamatan agen pada naskah Bab III. Firmware 1.0 memanggilnya pada setiap paket, sehingga `t` naik sepuluh per siklus dan `ln(min(t, W))` sudah jenuh pada siklus ke-5. Saklar kompilasi `-DT_PER_PAKET` mengembalikan perilaku 1.0 untuk mereproduksi log lama. Jendela `W` berlaku per arm: buffer melingkar 50 reward per arm, satu reward per siklus.
+Aturan N = 0: arm tanpa entri di dalam window mendapat skor tak hingga dan langsung dipilih; bila lebih dari satu, arm berindeks terkecil. Pada `t < 2` bonus eksplorasi ditiadakan.
+
+Firmware 1.0 dan 1.1 memakai window 50 reward per arm dan menaruh `XI` di luar akar. Perbedaan itu ditemukan pada catatan Pembimbing I 1 November 2026 dan diperbaiki pada 1.2. Agen lama dipertahankan di `tools/replay_swucb.py` (`--agen lama`) hanya untuk mereproduksi log lama.
+
+Setiap keputusan mencetak `IDX,t=..,I=I1;I2;I3;I4,N=N1;N2;N3;N4,pilih=..` dan setiap reward mencetak `UPD,t=..,arm=..,r=..`, untuk replay berbasis indeks (`tools/replay_indeks.py`). Uji unit dengan riwayat yang dihitung tangan: env `uji_agen` dan `uji_agen_ucb1` (`node/uji/uji_agen.cpp`), serta `tools/uji_agen.py` untuk kasus yang sama pada agen acuan.
 
 Reset keadaan agen (`reset_keadaan_agen()` di `main.cpp`) mengembalikan `t`, `N`, isi window, nomor urut paket, penghitung ACK, akumulasi energi, dan giliran sweep ke nol. Dua pemicunya: boot dingin (RTC RAM kosong atau rusak) dan tombol BOOT (GPIO0) yang ditahan saat node bangun dari tidur IDLE, yaitu lebih lama dari `T_SLEEP_S`. Node mencetak baris `RESET AGEN sebab=...`. Karena nomor urut ikut kembali ke nol, awal tiap skenario terbaca di log gateway sebagai baris `# NODE_RESET` (lihat 4.4).
 
-Mode UCB1 (pembanding) memakai rata-rata kumulatif dan `ln(t)` tanpa batas jendela; hanya itu perbedaannya, supaya selisih hasil murni berasal dari jendela geser.
+Mode UCB1 (pembanding) memakai rata-rata kumulatif dan `ln(t)` tanpa batas jendela, dengan `XI` di dalam akar seperti SW-UCB dan fungsi reward yang sama; hanya itu perbedaannya, supaya selisih hasil murni berasal dari jendela geser.
 
 Mode sweep tidak memakai keputusan agen: arm bergantian 1, 2, 3, 4 per siklus ACK (`rtc_sweep_arm`), dan agen tetap menerima reward supaya keadaan RTC konsisten.
 
@@ -377,6 +382,9 @@ Env `uji_guard` tidak memakai program tersendiri: ia mengompilasi firmware produ
 |---|---|
 | `prevalidasi_swucb.py` | pra-validasi SW-UCB terhadap UCB1 di Python sebelum firmware (Tahap 0): re-konvergensi, uji berpasangan, selang kepercayaan bootstrap |
 | `olah_siklus.py` | mengolah log gateway per siklus ACK dan per contact window: reward per siklus, cakupan arm per skenario, tegangan bus per window; menandai arm yang datanya tipis |
+| `replay_indeks.py` | replay berbasis indeks untuk log node 1.2: membandingkan keempat indeks, N, dan arm terpilih pada setiap keputusan dengan agen acuan, toleransi 0,0001 |
+| `uji_agen.py` | uji unit agen acuan dengan kasus yang sama seperti `node/uji/uji_agen.cpp` |
+| `rekam.py` | merekam serial gateway dan node tanpa memicu reset gateway, menulis kepala CSV sendiri, dan memperingatkan bila `# GATEWAY_BOOT` muncul di tengah rekaman |
 | `replay_swucb.py` | uji replay SW-UCB: memberi agen acuan (kelas `SWUCB` pada `prevalidasi_swucb.py`) arm dan reward yang dialami node pada satu log gateway, lalu membandingkan arm pilihannya dengan arm di log, per paket (firmware 1.0) dan per siklus (firmware 1.1). Rekaman yang tidak dimulai dari paket bernomor 0 ditandai sebagai uji bersyarat |
 | `ringkas_log.py` | meringkas log paket menjadi satu baris per ID window untuk sheet 04 buku kerja, dengan koreksi pergeseran energi satu paket dan rekonstruksi paket hilang |
 | `buat_diagram.py`, `buat_gambar_jurnal.py`, `buat_gambar_slide.py` | membangkitkan diagram alur untuk naskah, artikel jurnal, dan slide |

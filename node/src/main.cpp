@@ -24,8 +24,7 @@
 #include "modules/fsm.h"
 
 // ---------------- keadaan yang bertahan di RTC RAM ----------------
-RTC_DATA_ATTR ArmState rtc_arms[N_ARMS];
-RTC_DATA_ATTR uint32_t rtc_t_global          = 0;
+RTC_DATA_ATTR AgentState rtc_agen;           // t, window, atau rata-rata UCB1
 RTC_DATA_ATTR uint16_t rtc_pkt_seq           = 0;
 RTC_DATA_ATTR uint16_t rtc_ack_counter       = 0;
 RTC_DATA_ATTR double   rtc_energi_akum_mJ    = 0.0;
@@ -38,9 +37,11 @@ RTC_DATA_ATTR bool     rtc_dalam_guard       = false;
 RTC_DATA_ATTR uint32_t rtc_penanda_sah       = 0;
 RTC_DATA_ATTR uint8_t  rtc_sweep_arm         = 0;   // giliran arm, mode sweep
 
-static const uint32_t PENANDA_SAH = 0x57554342UL;  // "WUCB"
+// Nilai berganti bila tata letak RTC berubah, supaya keadaan lama tidak dibaca
+// dengan susunan baru. "WUC2": AgentState dengan window bersama (firmware 1.2).
+static const uint32_t PENANDA_SAH = 0x57554332UL;
 
-SW_UCB_Agent agent(rtc_arms, &rtc_t_global);
+SW_UCB_Agent agent(&rtc_agen);
 
 // Cetak seluruh parameter aktif saat boot. SOP Subbab III.2 mensyaratkan nilai
 // firmware diperiksa terhadap sheet 00-Konfigurasi lewat baris cetak ini.
@@ -54,11 +55,11 @@ static void cetak_parameter() {
     Serial.printf ("  label log: Metode Sweep; tidak masuk analisis hipotesis\n");
     Serial.printf ("  alpha=%.2f  beta=%.2f\n", ALPHA, BETA);
 #elif MODE_SW_UCB
-    Serial.printf ("  mode=SW-UCB (jendela W, Persamaan 2.5-2.6)\n");
+    Serial.printf ("  mode=SW-UCB (Persamaan 2.5-2.6: window bersama W keputusan, xi di dalam akar)\n");
     Serial.printf ("  W=%d  xi=%.2f  alpha=%.2f  beta=%.2f\n",
                    W_SIZE, XI, ALPHA, BETA);
 #else
-    Serial.printf ("  mode=UCB1 (kumulatif tanpa jendela, Persamaan 2.4) -- "
+    Serial.printf ("  mode=UCB1 (kumulatif tanpa jendela, Persamaan 2.4, xi di dalam akar) -- "
                    "W_SIZE tidak dipakai\n");
     Serial.printf ("  xi=%.2f  alpha=%.2f  beta=%.2f\n", XI, ALPHA, BETA);
 #endif
@@ -159,7 +160,7 @@ void setup() {
         reset_keadaan_agen("tombol BOOT ditahan");
     } else if (bangun_dari_sleep) {
         Serial.printf("Bangun: t=%lu seq=%u vbatt=%.2fV\n",
-                      (unsigned long)rtc_t_global, (unsigned)rtc_pkt_seq,
+                      (unsigned long)agent.t(), (unsigned)rtc_pkt_seq,
                       rtc_vbatt);
     }
 

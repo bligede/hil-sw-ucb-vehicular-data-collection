@@ -52,7 +52,7 @@
 // 1. Ruang aksi SW-UCB (Naskah 4.1.1, tidak berubah)
 // ============================================================
 #define N_ARMS        4
-#define W_SIZE       50    // ukuran sliding window (observasi per arm; satu observasi = satu siklus ACK)
+#define W_SIZE       50    // panjang sliding window: 50 keputusan terakhir, satu keputusan = satu siklus ACK, satu window untuk semua arm
 #define XI            0.5f // parameter eksplorasi
 
 // Arm: {TP dBm, CR (5..8 untuk 4/5..4/8)}
@@ -178,7 +178,7 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // 7. Mode algoritma: SW-UCB (default) atau UCB1 pembanding (Naskah 2.1.13,
 //    Rumusan Masalah 3 / Hipotesis Minor 1)
 // ============================================================
-// SW-UCB membatasi rata-rata dan isi logaritma ke W_SIZE transmisi terakhir.
+// SW-UCB membatasi rata-rata dan isi logaritma ke W_SIZE keputusan terakhir.
 // UCB1 memakai rata-rata kumulatif seluruh riwayat, tanpa batas jendela.
 // Itulah SATU-SATUNYA perbedaan yang dimaksudkan: ruang aksi, fungsi reward,
 // dan XI tetap sama persis pada kedua mode, supaya selisih hasil yang teramati
@@ -198,11 +198,12 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // sekali pada paket pertama tiap siklus, sehingga t, N, dan W semuanya berhitung dalam
 // siklus. Firmware 1.0 memanggilnya pada setiap paket: t naik sepuluh per siklus dan
 // ln(min(t, W)) sudah jenuh di W pada siklus ke-5, padahal N dan W berhitung dalam
-// siklus. Hasil uji replay: tools/replay_swucb.py.
-// Aktifkan -DT_PER_PAKET hanya untuk mereproduksi log firmware 1.0.
-#ifndef T_PER_PAKET
-  #define T_PER_PAKET 0
-#endif
+// siklus. Disetujui Pembimbing I, 1 Nov 2026 (B.1).
+//
+// Firmware 1.1 menyediakan saklar T_PER_PAKET untuk mereproduksi log 1.0. Sejak
+// 1.2 agennya berganti (window bersama, xi di dalam akar), sehingga saklar itu
+// tidak lagi dapat mereproduksi apa pun dan dihapus. Log lama direproduksi oleh
+// agen lama pada tools/replay_swucb.py (--agen lama).
 
 // Mode sweep: lintasan eksplorasi tambahan (keputusan Pembimbing I, 27 Sep 2026).
 // Arm TIDAK dipilih agen, melainkan bergiliran Arm 1, 2, 3, 4 per siklus ACK,
@@ -227,10 +228,10 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // 8. Penanda kompilasi
 // ============================================================
 #if MODE_SWEEP_AKTIF
-  #define FW_VERSI    "node-1.1-sweep"
+  #define FW_VERSI    "node-1.2-sweep"
 #elif MODE_SW_UCB
-  #define FW_VERSI    "node-1.1-swucb"
+  #define FW_VERSI    "node-1.2-swucb"
 #else
-  #define FW_VERSI    "node-1.1-ucb1"
+  #define FW_VERSI    "node-1.2-ucb1"
 #endif
 #define SERIAL_BAUD   115200

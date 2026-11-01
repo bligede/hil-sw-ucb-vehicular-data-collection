@@ -3,10 +3,11 @@
 Dijalankan sebelum satu baris firmware ditulis. Memperbaiki kekeliruan formula
 di Python jauh lebih murah daripada menelusurinya di ESP32.
 
-Implementasi SW-UCB di bawah SENGAJA menyalin struktur modules/SW_UCB_Agent.cpp
-(buffer melingkar, rata-rata dihitung ulang dari isi buffer, bonus eksplorasi
-memakai ln(min(t, W))). Bila keduanya berbeda, hasil validasi ini tidak mewakili
-perilaku firmware.
+Implementasi SW-UCB di bawah SENGAJA menyalin modules/SW_UCB_Agent.cpp: satu
+window bersama W keputusan terakhir, xi di dalam akar, bonus eksplorasi memakai
+ln(min(t, W)). Bila keduanya berbeda, hasil validasi ini tidak mewakili perilaku
+firmware. tools/uji_agen.py menjalankan kasus uji unit yang sama dengan
+node/uji/uji_agen.cpp terhadap kelas ini.
 
 Kriteria lolos (Panduan HIL Subbab 0.3):
   1. Sesudah distribusi berganti, SW-UCB kembali ke arm optimal dalam <= 30 iterasi
@@ -65,44 +66,61 @@ def arm_optimal(t):
 
 
 class SWUCB:
-    """Menyalin modules/SW_UCB_Agent.cpp."""
+    """Menyalin modules/SW_UCB_Agent.cpp (firmware 1.2), Persamaan (2.5)-(2.6).
+
+    Satu window untuk semua arm: N dan rata-rata dihitung dari W keputusan
+    terakhir (nomor t-W+1 sampai t). xi di dalam akar. Keputusan yang tidak
+    memperoleh reward (select tanpa update) tetap menggeser t.
+    """
 
     nama = "SW-UCB"
 
-    def __init__(self):
-        self.buf = [[0.0] * W_SIZE for _ in range(N_ARMS)]
-        self.head = [0] * N_ARMS
-        self.n = [0] * N_ARMS
-        self.mu = [0.0] * N_ARMS
+    def __init__(self, w=W_SIZE):
+        self.w = w
+        self.entri = []          # (nomor keputusan, arm, reward)
         self.t = 0
 
-    def score(self, a):
-        if self.n[a] == 0:
+    def _statistik(self):
+        n = [0] * N_ARMS
+        jumlah = [0.0] * N_ARMS
+        for t_e, a, r in self.entri:
+            if self.t - t_e < self.w:
+                n[a] += 1
+                jumlah[a] += r
+        return n, jumlah
+
+    def _skor(self, n, jumlah):
+        if n == 0:
             return math.inf
-        eff_t = min(self.t, W_SIZE)
-        if eff_t < 2:
-            return self.mu[a]
-        return self.mu[a] + XI * math.sqrt(math.log(eff_t) / self.n[a])
+        mu = jumlah / n
+        c = min(self.t, self.w)
+        if c < 2:
+            return mu
+        return mu + math.sqrt(XI * math.log(c) / n)
+
+    def score(self, a):
+        n, jumlah = self._statistik()
+        return self._skor(n[a], jumlah[a])
 
     def select(self):
+        n, jumlah = self._statistik()
         best, best_s = 0, -math.inf
         for a in range(N_ARMS):
-            s = self.score(a)
+            s = self._skor(n[a], jumlah[a])
             if s > best_s:
                 best_s, best = s, a
         self.t += 1
         return best
 
     def update(self, a, r):
-        self.buf[a][self.head[a]] = r
-        self.head[a] = (self.head[a] + 1) % W_SIZE
-        if self.n[a] < W_SIZE:
-            self.n[a] += 1
-        self.mu[a] = sum(self.buf[a][: self.n[a]]) / self.n[a]
+        self.entri.append((self.t, a, r))
+        if len(self.entri) > self.w:
+            self.entri.pop(0)
 
 
 class UCB1:
-    """Pembanding: rata-rata kumulatif seluruh riwayat, tanpa sliding window."""
+    """Pembanding: rata-rata kumulatif seluruh riwayat, tanpa sliding window.
+    xi di dalam akar, sama dengan SW-UCB."""
 
     nama = "UCB1"
 
@@ -117,7 +135,7 @@ class UCB1:
         mu = self.sum[a] / self.n[a]
         if self.t < 2:
             return mu
-        return mu + XI * math.sqrt(math.log(self.t) / self.n[a])
+        return mu + math.sqrt(XI * math.log(self.t) / self.n[a])
 
     def select(self):
         best, best_s = 0, -math.inf

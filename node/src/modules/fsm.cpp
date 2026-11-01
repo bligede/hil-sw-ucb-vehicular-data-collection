@@ -9,8 +9,6 @@
 // ---- keadaan yang bertahan lintas deep sleep, didefinisikan di main.cpp ----
 // Atribut RTC_DATA_ATTR hanya dipasang pada definisinya, bukan pada deklarasi
 // extern ini, karena atribut penempatan section tidak berlaku untuk deklarasi.
-extern ArmState rtc_arms[N_ARMS];
-extern uint32_t rtc_t_global;
 extern uint16_t rtc_pkt_seq;
 extern uint16_t rtc_ack_counter;
 extern double   rtc_energi_akum_mJ;
@@ -59,15 +57,25 @@ static void kirim_satu_paket() {
 #if MODE_SWEEP_AKTIF
     // Arm tetap sepanjang satu siklus ACK; berganti di evaluasi_reward().
     uint8_t arm_idx = rtc_sweep_arm;
-#elif T_PER_PAKET
-    // Perilaku firmware 1.0, hanya untuk mereproduksi log lama: satu keputusan per paket.
-    uint8_t arm_idx = agent.select_arm();
 #else
     // Satu keputusan per siklus ACK (naskah Bab III): arm dipilih pada paket pertama
     // siklus dan dipakai sepuluh paket, sehingga t naik satu per siklus. rtc_ack_counter
     // bernilai nol pada paket pertama setelah evaluasi reward, masuk window, maupun
     // keluar karena timeout_window.
-    uint8_t arm_idx = (rtc_ack_counter == 0) ? agent.select_arm() : rtc_arm_sekarang;
+    uint8_t arm_idx = rtc_arm_sekarang;
+    if (rtc_ack_counter == 0) {
+        arm_idx = agent.select_arm();
+        // Keempat indeks dicetak pada setiap keputusan, supaya replay dapat
+        // membandingkan indeks, bukan hanya arm terpilih (catatan A.1, 1 Nov 2026).
+        // Indeks tak hingga (N = 0) tercetak sebagai "inf".
+        Serial.printf("IDX,t=%lu,I=%.6f;%.6f;%.6f;%.6f,N=%lu;%lu;%lu;%lu,pilih=%u\n",
+                      (unsigned long)agent.t(),
+                      agent.skor_terakhir(0), agent.skor_terakhir(1),
+                      agent.skor_terakhir(2), agent.skor_terakhir(3),
+                      (unsigned long)agent.n_terakhir(0), (unsigned long)agent.n_terakhir(1),
+                      (unsigned long)agent.n_terakhir(2), (unsigned long)agent.n_terakhir(3),
+                      (unsigned)(arm_idx + 1));
+    }
 #endif
     rtc_arm_sekarang = arm_idx;
 
@@ -147,6 +155,9 @@ static void evaluasi_reward() {
     }
 
     agent.update(rtc_arm_sekarang, reward);
+    // Reward persis yang masuk ke agen, enam desimal, untuk replay berbasis indeks.
+    Serial.printf("UPD,t=%lu,arm=%u,r=%.6f\n", (unsigned long)agent.t(),
+                  (unsigned)(rtc_arm_sekarang + 1), reward);
 
 #if MODE_SWEEP_AKTIF
     // Giliran lanjut ke arm berikutnya, juga lintas contact window, sehingga
@@ -215,7 +226,7 @@ void fsm_tick() {
             s_t_masuk_window = millis();
             s_state = STATE_CONTACT_WINDOW;
             Serial.printf("CONTACT_WINDOW masuk rssi=%d t=%lu\n",
-                          rssi, (unsigned long)rtc_t_global);
+                          rssi, (unsigned long)agent.t());
         } else {
             tidur(T_SLEEP_S);
         }

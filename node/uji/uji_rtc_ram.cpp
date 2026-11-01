@@ -44,8 +44,7 @@
 
 static const uint32_t MAGIC = 0xA55A1234;
 
-RTC_DATA_ATTR ArmState rtc_arms[N_ARMS];
-RTC_DATA_ATTR uint32_t rtc_t_global = 0;
+RTC_DATA_ATTR AgentState rtc_agen;
 RTC_DATA_ATTR uint16_t rtc_pkt_seq = 0;
 RTC_DATA_ATTR uint16_t rtc_ack_counter = 0;
 RTC_DATA_ATTR double   rtc_energi_akum_mJ = 0.0;
@@ -63,13 +62,14 @@ static INA219_WE ina(INA219_ADDR);
 static float pola_buf(int a, int i) { return 1.0f + (float)a + (float)i * 0.015625f; }
 
 static void isi_awal() {
-    for (int a = 0; a < N_ARMS; a++) {
-        for (int i = 0; i < W_SIZE; i++) rtc_arms[a].reward_buf[i] = pola_buf(a, i);
-        rtc_arms[a].buf_head = (uint16_t)(7 + a);
-        rtc_arms[a].n_in_window = (uint16_t)W_SIZE;
-        rtc_arms[a].mu = 0.5f + (float)a;
+    for (int i = 0; i < W_SIZE; i++) {
+        rtc_agen.t_entri[i] = 1000u + (uint32_t)i;
+        rtc_agen.reward[i] = pola_buf(i % N_ARMS, i);
+        rtc_agen.arm[i] = (uint8_t)(i % N_ARMS);
     }
-    rtc_t_global = 100000;
+    rtc_agen.head = 7;
+    rtc_agen.isi = (uint16_t)W_SIZE;
+    rtc_agen.t = 100000;
     rtc_pkt_seq = 40000;
     rtc_ack_counter = 7;
     rtc_energi_akum_mJ = 12345.678;
@@ -84,13 +84,14 @@ static void isi_awal() {
 
 static uint32_t periksa() {
     uint32_t rusak = 0;
-    for (int a = 0; a < N_ARMS; a++) {
-        for (int i = 0; i < W_SIZE; i++) if (rtc_arms[a].reward_buf[i] != pola_buf(a, i)) rusak++;
-        if (rtc_arms[a].buf_head != (uint16_t)(7 + a)) rusak++;
-        if (rtc_arms[a].n_in_window != (uint16_t)W_SIZE) rusak++;
-        if (rtc_arms[a].mu != 0.5f + (float)a) rusak++;
+    for (int i = 0; i < W_SIZE; i++) {
+        if (rtc_agen.t_entri[i] != 1000u + (uint32_t)i) rusak++;
+        if (rtc_agen.reward[i] != pola_buf(i % N_ARMS, i)) rusak++;
+        if (rtc_agen.arm[i] != (uint8_t)(i % N_ARMS)) rusak++;
     }
-    if (rtc_t_global != 100000 + rtc_siklus) rusak++;
+    if (rtc_agen.head != 7) rusak++;
+    if (rtc_agen.isi != (uint16_t)W_SIZE) rusak++;
+    if (rtc_agen.t != 100000 + rtc_siklus) rusak++;
     if (rtc_pkt_seq != (uint16_t)(40000 + rtc_siklus)) rusak++;
     if (rtc_ack_counter != 7) rusak++;
     if (rtc_energi_akum_mJ != 12345.678 + (double)rtc_siklus) rusak++;
@@ -159,7 +160,7 @@ void setup() {
 
     // perbarui variabel dinamis lalu tidur
     rtc_siklus++;
-    rtc_t_global = 100000 + rtc_siklus;
+    rtc_agen.t = 100000 + rtc_siklus;
     rtc_pkt_seq = (uint16_t)(40000 + rtc_siklus);
     rtc_energi_akum_mJ = 12345.678 + (double)rtc_siklus;
     rtc_uptime_s = 123456 + (uint32_t)UJI_TIDUR_S * rtc_siklus;

@@ -22,6 +22,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <LoRa.h>
+#include <esp_system.h>
 #include "config/pin_map.h"
 #include "config/protocol.h"
 #include "modules/unggah_sheets.h"
@@ -42,7 +43,12 @@
 // project sekaligus.
 #define ACK_SETIAP_N     10
 #define ACK_JEDA_MS      50UL     // beri waktu node masuk ke mode terima
-#define ACK_IDLE_MS      800UL    // batas diam sebelum jendela ditutup paksa
+// Batas diam sebelum jendela ditutup paksa. 800 ms lebih pendek daripada jeda
+// sesudah satu paket hilang (sekitar 1,17 detik), sehingga gateway mengirim ACK
+// dini yang tidak didengar node. 1400 ms disetujui Pembimbing I hanya untuk uji
+// laboratorium (1 Nov 2026, B.3); dua paket hilang berturut-turut masih gagal,
+// jadi sebelum Tahap 4.6 penutupan siklus harus berbasis posisi paket.
+#define ACK_IDLE_MS      1400UL
 
 // Beacon diam selama window kontak berjalan (penyimpangan D18, 23 Okt 2026).
 //
@@ -66,6 +72,11 @@
 static uint32_t last_beacon_ms = 0;
 static uint32_t pkt_total = 0;
 static char     id_window[32] = "BELUM-DISET";
+// ID window baru dari perintah W atau Sheets menunggu di sini sampai tidak ada
+// siklus ACK yang berjalan. Pergantian ID tidak pernah menyentuh pencacah siklus
+// (catatan Pembimbing I, 1 Nov 2026, A.2): mengosongkannya di tengah siklus
+// membuat ACK melaporkan jumlah yang salah dan mencemari reward.
+static char     id_tertunda[32] = "";
 
 // Pencacah jendela ACK.
 //
@@ -136,9 +147,8 @@ static void proses_perintah() {
     if (baris.startsWith("W ")) {
         String id = baris.substring(2);
         id.trim();
-        id.toCharArray(id_window, sizeof(id_window));
-        n_diterima = 0;
-        Serial.printf("# id_window=%s pencacah dikosongkan\n", id_window);
+        id.toCharArray(id_tertunda, sizeof(id_tertunda));
+        Serial.printf("# id_window=%s diterima, berlaku pada siklus berikutnya\n", id_tertunda);
     } else if (baris == "S") {
         Serial.printf("# id_window=%s total=%lu jendela_berjalan=%u seq_awal=%u\n",
                       id_window, (unsigned long)pkt_total,
@@ -177,7 +187,7 @@ void setup() {
 
     // Layar lebih dulu supaya kegagalan LoRa tampil tanpa laptop.
     if (lcd_mulai()) {
-        lcd_pesan("Gateway LoRa 1.1", "SF8 BW125 433MHz", "Menyiapkan radio...", "");
+        lcd_pesan("Gateway LoRa 1.3", "SF8 BW125 433MHz", "Menyiapkan radio...", "");
     } else {
         Serial.println("# LCD tidak terdeteksi, tampilan dinonaktifkan");
     }
@@ -213,7 +223,12 @@ void setup() {
     lcd_pesan("Gateway siap", "Menunggu node...", "", "");
 
     indikator_uji();
-    Serial.println("# gateway-1.2 siap. Perintah: 'W <id_window>', 'S', 'L [detik]'");
+    // Setiap gateway menyala tercatat di log beserta sebabnya, supaya reset
+    // gateway di tengah skenario terlihat (A.2). Menurut SOP, skenario yang
+    // memuat baris ini di tengah rekaman diulang seluruhnya.
+    Serial.printf("# GATEWAY_BOOT sebab=%d ack_idle_ms=%lu\n",
+                  (int)esp_reset_reason(), (unsigned long)ACK_IDLE_MS);
+    Serial.println("# gateway-1.3 siap. Perintah: 'W <id_window>', 'S', 'L [detik]'");
     cetak_header_csv();
 }
 
@@ -244,12 +259,14 @@ void loop() {
 
     // ID window dari sel B1 lembar KONTROL. Diterapkan hanya saat tidak ada
     // jendela ACK berjalan, supaya pencacah tidak terpotong di tengah siklus.
-    if (n_diterima == 0) {
+    {
         char baru[sizeof id_window];
-        if (sheets_window_baru(baru, sizeof baru)) {
-            strlcpy(id_window, baru, sizeof id_window);
-            Serial.printf("# id_window=%s (dari Sheets) pencacah dikosongkan\n", id_window);
-        }
+        if (sheets_window_baru(baru, sizeof baru)) strlcpy(id_tertunda, baru, sizeof id_tertunda);
+    }
+    if (n_diterima == 0 && id_tertunda[0] != '\0') {
+        strlcpy(id_window, id_tertunda, sizeof id_window);
+        id_tertunda[0] = '\0';
+        Serial.printf("# id_window=%s berlaku\n", id_window);
     }
 
     // --- beacon periodik ---
