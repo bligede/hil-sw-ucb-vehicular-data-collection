@@ -33,6 +33,7 @@ void  energy_sample();        // panggil berulang selama radio memancar
 float energy_end_mJ();        // panggil sesudah transmisi tuntas
 
 float energy_vbatt_V();       // tegangan bus terakhir (untuk BATTERY_GUARD)
-float energy_baca_vbatt_V();  // pembacaan tegangan baru, di luar transmisi
+float energy_baca_vbatt_V();  // pembacaan tegangan baru, di luar transmisi;
+                              // NAN bila tiga pembacaan berturut-turut gagal
 uint16_t energy_jumlah_sampel(); // cuplikan pada transmisi terakhir; nol
                                  // menandakan pencuplikan tidak berjalan

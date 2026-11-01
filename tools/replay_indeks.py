@@ -44,9 +44,9 @@ def main():
     a = ap.parse_args()
 
     baru = pv.UCB1 if a.ucb1 else pv.SWUCB
-    ag = baru()
+    ag = None              # agen acuan baru dibuat pada baris RESET AGEN pertama
     baris_tabel = []
-    n_kep = n_ok = n_reset = 0
+    n_kep = n_ok = n_reset = n_lewat = 0
     selisih_maks = 0.0
     with open(a.berkas, encoding="utf-8", errors="replace") as f:
         for no, l in enumerate(f, 1):
@@ -55,6 +55,10 @@ def main():
                 n_reset += 1
                 continue
             m = RE_IDX.search(l)
+            if m and ag is None:
+                # Keputusan sebelum reset pertama tidak dapat diuji: riwayatnya tidak terekam.
+                n_lewat += 1
+                continue
             if m:
                 t_node = int(m.group(1))
                 i_node = [angka(x) for x in m.group(2).split(";")]
@@ -85,10 +89,13 @@ def main():
                              ";".join("inf" if math.isinf(y) else "%.6f" % y for y in i_ref)))
                 continue
             m = RE_UPD.search(l)
-            if m:
+            if m and ag is not None:
                 ag.update(int(m.group(2)) - 1, float(m.group(3)))
 
     print("Reset agen terbaca: %d" % n_reset)
+    if n_lewat:
+        print("PERINGATAN: %d keputusan sebelum reset pertama dilewati; rekaman harus dimulai "
+              "sebelum node direset atau dinyalakan." % n_lewat)
     print("Keputusan cocok (indeks, N, arm): %d dari %d; selisih indeks terbesar %.2e"
           % (n_ok, n_kep, selisih_maks))
     if a.keluaran:

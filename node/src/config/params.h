@@ -146,6 +146,9 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
   #define V_BATT_PULIH       3.50f   // keluar dari BATTERY_GUARD
   #define GUARD_SLEEP_S      3600ULL // tidur panjang saat baterai kritis
 #endif
+// Pembacaan tegangan di bawah nilai ini dianggap error baca, bukan baterai
+// kosong: ESP32 dan modul penaik sudah mati jauh sebelum baterai turun ke 1 V.
+#define VBATT_BACA_MIN     1.0f
 
 // Jeda antar-paket di dalam CONTACT_WINDOW (D7).
 // Panduan HIL tidak menetapkan jeda sama sekali, sehingga node memancar hampir

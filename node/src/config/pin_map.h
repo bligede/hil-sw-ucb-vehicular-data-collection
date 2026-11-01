@@ -38,7 +38,13 @@
 // INA219 membaca 1,101, 1,103, dan 1,108 kali nilai itu, yaitu galat gain
 // konsisten sekitar 10 persen, sehingga shunt efektif modul ini 0,1104 ohm.
 // Ganti nilainya bila modul INA219 diganti.
-#define INA219_SHUNT_OHM  0.1104f
+//
+// 1 Nov 2026: modul itu bergeser ke 0,1198 ohm efektif (uji resistor 0 sampai
+// 16 mA, data/uji_ina219_1nov.txt), sesudah node dipindah enclosure dan dijemur.
+// Diganti modul cadangan dengan shunt efektif 0,1021 ohm, offset -0,02 mV, dari
+// uji yang sama. Belum dikalibrasi pada 130 sampai 220 mA (butir 4 catatan
+// Pembimbing I, 26 Okt 2026).
+#define INA219_SHUNT_OHM  0.1021f
 // Koreksi offset ADXL345, ditulis ke register OFSX/OFSY/OFSZ saat sensor_init().
 // Satuan register 15,6 mg per LSB (rentang -128..127), nilai ditambahkan ke
 // keluaran sensor. Modul GY-291 yang dipakai penelitian ini memiliki offset

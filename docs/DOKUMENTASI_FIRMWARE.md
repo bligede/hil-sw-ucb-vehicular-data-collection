@@ -3,7 +3,7 @@
 Arsitektur Edge-AI untuk Kendali Transmisi Otonom LoRa pada Pengumpulan Data Kendaraan: Implementasi Algoritma Sliding-Window Upper Confidence Bound pada Kanal Non-Stasioner Kendaraan.
 
 Penulis: I Gede Wahyu Wiranata (NIM 2481711013), Magister Teknik Elektro, Universitas Udayana.
-Versi firmware: node-1.2-swucb, node-1.2-ucb1, node-1.2-sweep, dan gateway-1.3. Tanggal dokumen: 1 November 2026. Perubahan dari 1.1: agen mengikuti Persamaan 2.5 dan 2.6 (window bersama, xi di dalam akar), node mencetak indeks tiap keputusan, gateway tidak lagi mengosongkan pencacah saat ID window berganti, mencetak # GATEWAY_BOOT, dan ACK_IDLE_MS 1400 ms untuk uji laboratorium.
+Versi firmware: node-1.2-swucb, node-1.2-ucb1, node-1.2-sweep, dan gateway-1.4. Tanggal dokumen: 1 November 2026. Perubahan dari 1.1: agen mengikuti Persamaan 2.5 dan 2.6 (window bersama, xi di dalam akar), node mencetak indeks tiap keputusan, gateway tidak lagi mengosongkan pencacah saat ID window berganti, mencetak # GATEWAY_BOOT, dan ACK_IDLE_MS 1400 ms untuk uji laboratorium.
 
 ## 1. Ikhtisar sistem
 
@@ -143,7 +143,7 @@ Baris berawalan `#` adalah komentar dan dilewati `olah_siklus.py`. Gateway 1.2 m
 
 ### 4.5 Aturan penutupan jendela ACK
 
-Gateway menutup jendela dan mengirim ACK bila rentang nomor urut paket mencapai sepuluh (selisih `seq - seq_awal >= 9`), berapa pun paket yang benar-benar tiba. Bila paket terakhir hilang, jendela ditutup paksa setelah `ACK_IDLE_MS` tanpa paket: 1400 ms sejak gateway 1.3 (800 ms sebelumnya, yang menghasilkan ACK dini bila satu paket hilang di tengah siklus). Dengan cara ini kehilangan paket tetap tampak pada PDR (penyimpangan D16). Nilai 1400 ms hanya untuk uji laboratorium; dua paket hilang berturut-turut atau tiga paket terakhir hilang masih menghasilkan ACK yang salah, sehingga sebelum Tahap 4.6 penutupan siklus akan berbasis posisi paket di dalam siklus dan ACK membawa penanda siklus. Perintah `W` dan ID dari Sheets tidak menyentuh pencacah siklus; ID baru berlaku pada siklus berikutnya.
+Gateway menutup jendela dan mengirim ACK bila rentang nomor urut paket mencapai sepuluh (selisih `seq - seq_awal >= 9`), berapa pun paket yang benar-benar tiba. Bila paket terakhir hilang, jendela ditutup paksa setelah `ACK_IDLE_MS` tanpa paket: 1400 ms sejak gateway 1.3 (800 ms sebelumnya, yang menghasilkan ACK dini bila satu paket hilang di tengah siklus). Dengan cara ini kehilangan paket tetap tampak pada PDR (penyimpangan D16). Nilai 1400 ms hanya untuk uji laboratorium; dua paket hilang berturut-turut atau tiga paket terakhir hilang masih menghasilkan ACK yang salah, sehingga sebelum Tahap 4.6 penutupan siklus akan berbasis posisi paket di dalam siklus dan ACK membawa penanda siklus. Perintah `W` dan ID dari Sheets tidak menyentuh pencacah siklus; ID baru berlaku pada siklus berikutnya. Sejak gateway 1.4 setiap paket divalidasi sebelum dihitung: arm harus 1 sampai 4, tegangan paling tinggi 4,50 V, energi paling tinggi 300 mJ, jarak dari paket sah sebelumnya paling sedikit 150 ms, nomor urut tidak sama dengan paket sebelumnya, dan di dalam siklus terbuka nomor urut berada di rentang siklus itu. Paket yang gagal dicatat sebagai `# TOLAK alasan=...` dan tidak dihitung di ACK. Lima penolakan beruntun membuat radio diinisialisasi ulang (`# RADIO_REINIT`). Aturan ini ditambahkan setelah radio gateway terbukti membaca paket yang sama berulang kali (ACK berisi 19) dan menghasilkan paket palsu beruntun pada 1 November 2026.
 
 ### 4.6 Perintah serial gateway (115200 baud)
 

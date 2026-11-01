@@ -184,7 +184,16 @@ void fsm_tick() {
     // lagi. Tabel 4.1 naskah menetapkan syarat keluar pada 3,5 V, dan pita
     // 0,2 V itulah yang mencegah node berkedip masuk-keluar guard saat baterai
     // hampir habis dan tegangannya naik-turun mengikuti beban.
-    rtc_vbatt = energy_baca_vbatt_V();
+    // Pembacaan gagal tidak boleh memicu guard: nilai sah terakhir dipakai dan
+    // kegagalannya dicatat. Node yang benar-benar kehabisan baterai tidak akan
+    // menyala untuk membaca 0 V, jadi pembacaan rendah semacam itu selalu error baca.
+    const float v_baca = energy_baca_vbatt_V();
+    if (isnan(v_baca)) {
+        Serial.printf("VBATT_GAGAL baca INA219 gagal 3 kali, memakai nilai terakhir %.2fV\n",
+                      rtc_vbatt);
+    } else {
+        rtc_vbatt = v_baca;
+    }
 
     if (rtc_dalam_guard) {
         if (rtc_vbatt > V_BATT_PULIH) {

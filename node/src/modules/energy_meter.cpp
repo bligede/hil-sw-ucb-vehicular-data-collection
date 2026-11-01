@@ -1,5 +1,6 @@
 #include "energy_meter.h"
 #include <INA219_WE.h>
+#include <Wire.h>
 #include "../config/pin_map.h"
 #include "../config/params.h"
 
@@ -74,9 +75,23 @@ float energy_end_mJ() {
 
 float energy_vbatt_V() { return s_vbus_V; }
 
+// Pembacaan yang gagal (error I2C, atau nilai di bawah VBATT_BACA_MIN yang
+// mustahil selama node masih menyala) dibaca ulang sampai tiga kali. Bila tetap
+// gagal, fungsi mengembalikan NAN dan pemanggil memakai nilai sah terakhir.
+// Tanpa ini, satu pembacaan 0 V membuat node masuk BATTERY_GUARD dan tidur
+// satu jam (rekaman TAHAP43_DEKAT_IDX_01, 1 Nov 2026).
 float energy_baca_vbatt_V() {
-    s_vbus_V = ina219.getBusVoltage_V();
-    return s_vbus_V;
+    for (uint8_t coba = 0; coba < 3; coba++) {
+        Wire.beginTransmission(INA219_ADDR);
+        const bool hadir = (Wire.endTransmission() == 0);
+        const float v = ina219.getBusVoltage_V();
+        if (hadir && v >= VBATT_BACA_MIN) {
+            s_vbus_V = v;
+            return v;
+        }
+        delay(2);
+    }
+    return NAN;
 }
 
 uint16_t energy_jumlah_sampel() { return s_n_sampel; }

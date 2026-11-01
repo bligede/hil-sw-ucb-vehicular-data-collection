@@ -93,6 +93,8 @@ static char     id_tertunda[32] = "";
 static uint16_t seq_awal = 0;           // nomor urut paket pertama pada jendela
 static uint16_t seq_lalu = 0;           // nomor urut paket diterima sebelumnya
 static bool     ada_seq_lalu = false;   // sudah ada paket sejak gateway menyala
+static uint32_t tolak_total = 0;        // paket ditolak validasi (lihat alasan_tolak)
+static uint32_t radio_reinit_total = 0; // radio diinisialisasi ulang karena kacau
 
 // Keadaan terakhir yang ditampilkan pada LCD.
 static bool     ada_paket = false;
@@ -150,9 +152,10 @@ static void proses_perintah() {
         id.toCharArray(id_tertunda, sizeof(id_tertunda));
         Serial.printf("# id_window=%s diterima, berlaku pada siklus berikutnya\n", id_tertunda);
     } else if (baris == "S") {
-        Serial.printf("# id_window=%s total=%lu jendela_berjalan=%u seq_awal=%u\n",
+        Serial.printf("# id_window=%s total=%lu jendela_berjalan=%u seq_awal=%u tolak=%lu radio_reinit=%lu\n",
                       id_window, (unsigned long)pkt_total,
-                      (unsigned)n_diterima, (unsigned)seq_awal);
+                      (unsigned)n_diterima, (unsigned)seq_awal,
+                      (unsigned long)tolak_total, (unsigned long)radio_reinit_total);
         char st[200];
         sheets_status(st, sizeof st);
         Serial.printf("# %s\n", st);
@@ -180,6 +183,48 @@ static void proses_perintah() {
     }
 }
 
+// Inisialisasi radio. Dipanggil saat menyala dan saat radio terdeteksi kacau.
+static bool radio_mulai() {
+    if (!LoRa.begin(LORA_FREQ_HZ)) return false;
+    // Parameter WAJIB identik dengan node, jika tidak paket tidak akan terbaca.
+    LoRa.setSpreadingFactor(LORA_SF);
+    LoRa.setSignalBandwidth(LORA_BW_HZ);
+    LoRa.setPreambleLength(LORA_PREAMBLE);
+    LoRa.setSyncWord(LORA_SYNC_WORD);
+    LoRa.setTxPower(17);
+    LoRa.enableCrc();
+    LoRa.receive();
+    return true;
+}
+
+// Validasi paket (1 Nov 2026). Rekaman SWEEP_EMAKS_01 memperlihatkan radio
+// gateway yang kacau: sekitar 160 "paket" berjarak 5 sampai 40 ms (satu paket
+// LoRa SF8 butuh sedikitnya 80 ms) dengan isi mustahil, dan semuanya ikut
+// terhitung di ACK sehingga reward node tercemar. Paket yang gagal salah satu
+// pemeriksaan di bawah ditolak, dicatat sebagai baris "# TOLAK", dan tidak
+// menyentuh pencacah siklus maupun penanda NODE_RESET.
+#define JARAK_PAKET_MIN_MS  150UL   // jarak sah terpendek ~200 ms (ACK lalu paket pertama siklus berikut); satu paket LoRa >= 82 ms
+#define E_RAW_MAKS          3000U   // 300 mJ; energi terukur paling besar ~115 mJ
+#define VBATT_RAW_MAKS      200U    // 4,50 V; baterai Li-ion penuh 4,2 V
+#define TOLAK_BERUNTUN_MAKS 5       // penolakan beruntun sebelum radio diinisialisasi ulang
+
+static uint32_t t_paket_sah = 0;     // waktu paket sah terakhir
+static bool     ada_paket_sah = false;
+static uint32_t tolak_beruntun = 0;
+
+static const char* alasan_tolak(const uint8_t* buf, uint16_t seq) {
+    const uint8_t arm = buf[0];
+    const uint16_t e_raw = (uint16_t)((uint16_t)buf[3] << 8 | buf[4]);
+    if (arm < 1 || arm > 4) return "arm";
+    if (buf[5] > VBATT_RAW_MAKS) return "vbatt";
+    if (e_raw > E_RAW_MAKS) return "energi";
+    if (ada_paket_sah && millis() - t_paket_sah < JARAK_PAKET_MIN_MS) return "terlalu_rapat";
+    if (ada_seq_lalu && seq == seq_lalu) return "duplikat";
+    // Di dalam siklus yang sedang terbuka, nomor urut harus di rentang siklus itu.
+    if (n_diterima > 0 && (uint16_t)(seq - seq_awal) >= ACK_SETIAP_N) return "di_luar_siklus";
+    return nullptr;
+}
+
 void setup() {
     Serial.begin(SERIAL_BAUD);
     indikator_mulai();
@@ -187,7 +232,7 @@ void setup() {
 
     // Layar lebih dulu supaya kegagalan LoRa tampil tanpa laptop.
     if (lcd_mulai()) {
-        lcd_pesan("Gateway LoRa 1.3", "SF8 BW125 433MHz", "Menyiapkan radio...", "");
+        lcd_pesan("Gateway LoRa 1.4", "SF8 BW125 433MHz", "Menyiapkan radio...", "");
     } else {
         Serial.println("# LCD tidak terdeteksi, tampilan dinonaktifkan");
     }
@@ -195,7 +240,7 @@ void setup() {
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_NSS);
     LoRa.setPins(LORA_NSS, LORA_RESET, LORA_DIO0);
 
-    if (!LoRa.begin(LORA_FREQ_HZ)) {
+    if (!radio_mulai()) {
         lcd_pesan("FATAL", "LoRa gagal init", "Cek 3V3 dan GND", "NSS RST MOSI MISO");
         indikator_radio_gagal();
         uint32_t t_fatal = millis() - 2000UL;
@@ -209,14 +254,6 @@ void setup() {
         }
     }
 
-    // Parameter WAJIB identik dengan node, jika tidak paket tidak akan terbaca.
-    LoRa.setSpreadingFactor(LORA_SF);
-    LoRa.setSignalBandwidth(LORA_BW_HZ);
-    LoRa.setPreambleLength(LORA_PREAMBLE);
-    LoRa.setSyncWord(LORA_SYNC_WORD);
-    LoRa.setTxPower(17);
-    LoRa.enableCrc();
-    LoRa.receive();
     indikator_radio_siap();
 
     sheets_mulai();
@@ -228,7 +265,7 @@ void setup() {
     // memuat baris ini di tengah rekaman diulang seluruhnya.
     Serial.printf("# GATEWAY_BOOT sebab=%d ack_idle_ms=%lu\n",
                   (int)esp_reset_reason(), (unsigned long)ACK_IDLE_MS);
-    Serial.println("# gateway-1.3 siap. Perintah: 'W <id_window>', 'S', 'L [detik]'");
+    Serial.println("# gateway-1.4 siap. Perintah: 'W <id_window>', 'S', 'L [detik]'");
     cetak_header_csv();
 }
 
@@ -316,6 +353,29 @@ void loop() {
     int16_t ax = (int16_t)((uint16_t)buf[6]  << 8 | buf[7]);
     int16_t ay = (int16_t)((uint16_t)buf[8]  << 8 | buf[9]);
     int16_t az = (int16_t)((uint16_t)buf[10] << 8 | buf[11]);
+
+    const char* alasan = alasan_tolak(buf, seq);
+    if (alasan) {
+        tolak_total++;
+        tolak_beruntun++;
+        Serial.printf("# TOLAK alasan=%s seq=%u arm=%u rssi=%d ts=%lu\n", alasan,
+                      (unsigned)seq, (unsigned)arm, rssi, (unsigned long)millis());
+        // Penolakan beruntun berarti radio sendiri yang kacau, bukan satu paket
+        // rusak: radio diinisialisasi ulang. Siklus yang sedang berjalan tetap
+        // dihitung dari paket sah yang sudah diterima.
+        if (tolak_beruntun >= TOLAK_BERUNTUN_MAKS) {
+            radio_reinit_total++;
+            const bool ok = radio_mulai();
+            Serial.printf("# RADIO_REINIT ke=%lu berhasil=%d tolak_total=%lu\n",
+                          (unsigned long)radio_reinit_total, ok ? 1 : 0,
+                          (unsigned long)tolak_total);
+            tolak_beruntun = 0;
+        }
+        return;
+    }
+    tolak_beruntun = 0;
+    t_paket_sah = millis();
+    ada_paket_sah = true;
 
     // Reset agen pada node (tombol BOOT atau boot dingin) mengembalikan nomor urut ke
     // nol. Nomor urut yang turun ke rentang 0..9 dari nilai di luar rentang itu dan
