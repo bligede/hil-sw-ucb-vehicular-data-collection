@@ -67,6 +67,9 @@ def main():
     ap.add_argument("--id", help="ID window yang dikirim ke gateway sesudah port terbuka")
     ap.add_argument("--detik", type=float, default=0, help="lama rekaman; 0 = sampai Ctrl+C")
     ap.add_argument("--awalan", default="rekam", help="awalan nama berkas keluaran")
+    ap.add_argument("--reset-node", action="store_true",
+                    help="node direkam lewat USB papannya sendiri: reset node (pulsa RTS ke EN) "
+                         "sesudah perekaman berjalan, supaya boot dingin ikut terekam")
     ap.add_argument("--w-uji", type=float, default=0,
                     help="uji A.2: detik ke berapa perintah 'W <id>_W' dikirim di tengah rekaman; 0 = tidak")
     a = ap.parse_args()
@@ -87,6 +90,12 @@ def main():
                                                          berhenti, catatan), daemon=True))
     for u in thread_rekam:
         u.start()
+    if a.node and a.reset_node:
+        time.sleep(1.0)
+        port[-1].rts = True
+        time.sleep(0.1)
+        port[-1].rts = False
+        print("node di-reset lewat USB")
     if a.gateway and a.id:
         time.sleep(0.5)
         port[0].write(("W %s\n" % a.id).encode())
