@@ -1,6 +1,6 @@
 """Gambar untuk artikel Smart Techno (Primakara University).
 
-Menghasilkan Figure 2 (FSM) dan Figure 3 (blok arsitektur sistem) yang diminta
+Menghasilkan Figure 1 (blok arsitektur sistem) dan Figure 2 (FSM) yang diminta
 pada Catatan Perbaikan Naskah Bagian C. Label berbahasa Inggris mengikuti naskah
 artikel, berbeda dari diagram tesis pada buat_diagram.py yang berbahasa Indonesia.
 
@@ -88,7 +88,7 @@ def simpan(fig, folder, nama):
 
 
 # ===================================================================
-# Figure 2 — Hybrid FSM supervisory control
+# Figure 2: Hybrid FSM supervisory control
 # ===================================================================
 def figure_fsm(folder):
     fig, ax = kanvas(9.2, 6.2, (-0.5, 10.6), (-0.55, 7.5))
@@ -96,7 +96,7 @@ def figure_fsm(folder):
     kotak(ax, 2.5, 6.3, 3.4, 0.95,
           "BATTERY_GUARD\nradio off, sleep 3600 s", "sorot")
     kotak(ax, 2.5, 4.0, 3.4, 1.10,
-          "IDLE\ndeep sleep 3 s,\nbeacon scan 1.2 s", "proses")
+          "IDLE\ndeep sleep 3 s, beacon scan 1.2 s;\n60 s cooldown after T_window", "proses")
     kotak(ax, 7.6, 4.0, 4.0, 1.10,
           "CONTACT_WINDOW\ntransmit packet, sample current\n"
           "during the transmission pulse", "proses")
@@ -114,7 +114,7 @@ def figure_fsm(folder):
     panah(ax, (1.9, 4.55), (1.9, 5.83))
     label(ax, 1.76, 5.19, "V_batt < 3.3 V", ha="right")
     panah(ax, (3.1, 5.83), (3.1, 4.55))
-    label(ax, 3.24, 5.19, "V_batt > 3.5 V", ha="left")
+    label(ax, 3.24, 5.19, "V_batt\n> 3.5 V", ha="left")
 
     # Deteksi kontak
     panah(ax, (4.2, 4.18), (5.6, 4.18))
@@ -126,10 +126,13 @@ def figure_fsm(folder):
     panah(ax, (8.6, 1.48), (8.6, 3.45))
     label(ax, 8.74, 2.66, "agent\nupdated", ha="left")
 
-    # Keluar jendela kontak
-    jalur(ax, [(5.6, 3.78), (5.6, 2.35), (2.5, 2.35), (2.5, 3.45)])
-    label(ax, 3.55, 1.98,
-          "ACK timeout  or  RSSI < −105 dBm\nor  t > 240 s")
+    # Keluar jendela kontak. Arahan Pembimbing I 2 Nov 2026 (B.3): ACK timeout dan
+    # RSSI ACK diperiksa di REWARD_EVAL; hanya batas waktu jendela yang keluar dari
+    # CONTACT_WINDOW, lalu cooldown 60 s. Label memakai T_window, bukan t milik agen.
+    jalur(ax, [(5.6, 0.95), (2.5, 0.95), (2.5, 3.45)])
+    label(ax, 4.0, 1.32, "ACK timeout  or\nRSSI of ACK < −105 dBm")
+    jalur(ax, [(7.6, 4.55), (7.6, 5.30), (4.05, 5.30), (4.05, 4.55)])
+    label(ax, 5.75, 5.62, "T_window > 240 s  (then 60 s cooldown)")
 
     label(ax, 5.05, -0.30,
           "BATTERY_GUARD is evaluated at the entry of every cycle and "
@@ -142,7 +145,7 @@ def figure_fsm(folder):
 
 
 # ===================================================================
-# Figure 3 — System architecture block diagram
+# Figure 1: System architecture block diagram
 # ===================================================================
 def figure_arsitektur(folder):
     fig, ax = kanvas(11.4, 6.1, (0.0, 14.0), (0.2, 8.25))
@@ -157,10 +160,11 @@ def figure_arsitektur(folder):
     kotak(ax, 4.0, 3.40, 3.8, 2.20,
           "SX1278 LoRa transceiver\n433 MHz, SF8, BW 125 kHz\n"
           "TP and CR selected\nby the agent")
-    kotak(ax, 2.30, 1.15, 2.00, 1.00, "1.1 W solar\n+ TP4056 + 18650",
+    kotak(ax, 2.30, 1.15, 2.00, 1.00, "solar charger\n+ 18650 cell",
           "terminal")
     kotak(ax, 4.15, 1.15, 1.50, 1.00, "INA219", "sorot")
-    kotak(ax, 5.85, 1.15, 1.60, 1.00, "MT3608\nboost", "terminal")
+    # Tanpa nama modul: rantai catu daya menunggu keputusan D19 (arahan B.3).
+    kotak(ax, 5.85, 1.15, 1.60, 1.00, "boost\nconverter", "terminal")
 
     panah(ax, (4.0, 6.54), (4.0, 6.25))
     label(ax, 4.16, 6.40, "I²C", ha="left")
@@ -192,7 +196,7 @@ def figure_arsitektur(folder):
 
     # --- Kanal LoRa ---
     panah(ax, (9.00, 4.15), (5.90, 4.15))
-    label(ax, 7.45, 4.42, "beacon, every 1 s")
+    label(ax, 7.45, 4.48, "beacon, every 1 s\n(silent during an active window)")
     panah(ax, (5.90, 3.40), (9.00, 3.40))
     label(ax, 7.45, 3.72, "data packet: arm, sequence\n"
                           "number, energy of previous")
@@ -202,7 +206,7 @@ def figure_arsitektur(folder):
     label(ax, 7.45, 7.98, "Contact window created by vehicle passage",
           font=FONT_LABEL + 0.4, warna="#555555")
 
-    simpan(fig, folder, "Figure3_Architecture.png")
+    simpan(fig, folder, "Figure1_Architecture.png")
 
 
 def main():

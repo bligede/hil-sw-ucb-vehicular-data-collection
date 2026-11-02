@@ -480,6 +480,59 @@ def sapuan(keluaran_csv):
     return xi_p, w_p
 
 
+def gambar_artikel(berkas, xi, w, g=0.3, seed_contoh=1001, seeds=range(1001, 1201)):
+    """Figure 3 artikel: satu lintasan contoh tiap agen dan sebaran perpindahan arm
+    greedy atas seed laporan, dengan xi dan W terpilih."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    def lintasan(ag):
+        m1, m2 = rata_skenario(g)
+        rng = random.Random(seed_contoh)
+        pil = []
+        for t in range(N_ITER):
+            m = m1 if t < CHANGE_AT else m2
+            a = ag.select()
+            ag.update(a, rng.gauss(m[a], STD))
+            pil.append(a)
+        return pil
+
+    js = lintasan(SWUCBCepat(xi, w))
+    ju = lintasan(UCB1Xi(xi))
+    gs_ = [jalankan_skenario(SWUCBCepat(xi, w), s, g)[1] for s in seeds]
+    gu = [jalankan_skenario(UCB1Xi(xi), s, g)[1] for s in seeds]
+    sisa = N_ITER - CHANGE_AT
+
+    fig = plt.figure(figsize=(9, 7.5))
+    grid = fig.add_gridspec(3, 1, height_ratios=[1, 1, 1.3], hspace=0.55)
+    for k, (jejak, judul) in enumerate(((js, "SW-UCB"), (ju, "UCB1"))):
+        ax = fig.add_subplot(grid[k])
+        ax.plot(range(1, N_ITER + 1), [a + 1 for a in jejak], ".", markersize=2)
+        ax.axvline(CHANGE_AT + 0.5, color="red", linestyle="--", label="reward change")
+        ax.set_yticks([1, 2, 3, 4])
+        ax.set_yticklabels(["Arm 1", "Arm 2", "Arm 3", "Arm 4"])
+        ax.set_title(f"{judul}, one illustrative run (reward gap {g})", fontsize=10)
+        ax.set_xlabel("decision")
+        ax.legend(loc="center right", fontsize=8)
+    ax = fig.add_subplot(grid[2])
+    nilai_s = [x for x in gs_ if x is not None]
+    nilai_u = [x if x is not None else sisa for x in gu]
+    bins = range(0, sisa + 11, 10)
+    ax.hist([nilai_s, nilai_u], bins=bins, color=["#4472C4", "#ED7D31"],
+            label=[f"SW-UCB (mean {statistics.mean(nilai_s):.1f})",
+                   f"UCB1 (mean of switching runs {statistics.mean([x for x in gu if x is not None]):.1f}; "
+                   f"{gu.count(None)} runs never switched, shown at {sisa})"])
+    ax.axvline(30, color="red", linestyle="--", label="30 decisions")
+    ax.set_xlabel("decisions after the change until the best estimate moves to the new optimal arm")
+    ax.set_ylabel("number of runs")
+    ax.set_title(f"Greedy switch time over {len(gs_)} runs (seeds {seeds.start} to {seeds.stop - 1})",
+                 fontsize=10)
+    ax.legend(fontsize=8)
+    fig.savefig(berkas, dpi=300, bbox_inches="tight", facecolor="white")
+    print(f"Figure 3 disimpan: {berkas}")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--ulangan", type=int, default=100)
@@ -487,9 +540,16 @@ def main():
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--sapuan", metavar="CSV",
                    help="jalankan sapuan xi dan W (arahan 2 Nov 2026) dan tulis tabel lengkap ke CSV")
+    p.add_argument("--gambar-artikel", metavar="PNG",
+                   help="buat Figure 3 artikel dengan --xi dan --w")
+    p.add_argument("--xi", type=float, default=0.05)
+    p.add_argument("--w", type=int, default=50)
     a = p.parse_args()
     if a.sapuan:
         sapuan(a.sapuan)
+        return
+    if a.gambar_artikel:
+        gambar_artikel(a.gambar_artikel, a.xi, a.w)
         return
 
     print("Pra-validasi SW-UCB vs UCB1, SOP Tahap 0")
