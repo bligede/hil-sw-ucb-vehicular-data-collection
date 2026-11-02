@@ -233,12 +233,264 @@ def uji_berpasangan(sw, ucb):
     print()
 
 
+# ===========================================================================
+# Sapuan xi dan W (arahan Pembimbing I untuk artikel, 2 Nov 2026, butir A.1)
+#
+# Aturan ditetapkan SEBELUM sapuan dijalankan dan tidak diubah sesudah hasil
+# terlihat:
+#   kisi        xi in {0,05; 0,1; 0,2; 0,5}, W in {25; 50; 100}; UCB1 memakai xi
+#               yang sama dengan SW-UCB.
+#   skenario    sintetis, empat arm, simpangan baku 0,1, perubahan distribusi pada
+#               keputusan ke-250 dari 500, jarak reward arm terbaik dan arm kedua
+#               g in {0,3; 0,1; 0,03}. Rata-rata fase 1 = [0,5+g; 0,5; 0,4; 0,2],
+#               fase 2 = [0,2; 0,4; 0,5; 0,5+g]. Pada g = 0,3 skenario ini sama
+#               dengan MEAN_FASE1 dan MEAN_FASE2 di atas.
+#   ukuran      (i) re-konvergensi berbasis dominansi: waktu_rekonvergensi() di atas;
+#               (ii) perpindahan arm greedy: banyak keputusan sesudah perubahan
+#               sampai arm dengan rata-rata tertinggi (window bersama untuk SW-UCB,
+#               kumulatif untuk UCB1, dihitung sesudah reward keputusan itu masuk)
+#               menjadi arm optimal baru dan bertahan 10 keputusan berturut-turut,
+#               dihitung sampai keputusan pertama deret itu (keputusan pertama
+#               sesudah perubahan bernilai 1);
+#               (iii) regret kumulatif (pseudo-regret atas rata-rata) 500 keputusan;
+#               (iv) porsi arm optimal pada fase stabil, keputusan 100-249 dan
+#               400-499.
+#   pemilihan   dari pasangan (xi, W) yang membuat rata-rata perpindahan arm greedy
+#               SW-UCB lebih cepat daripada UCB1 (xi sama) pada ketiga skenario,
+#               pilih regret kumulatif SW-UCB rata-rata terkecil atas ketiga
+#               skenario; seri: utamakan W = 50, lalu xi lebih besar; bila tidak
+#               ada yang memenuhi, xi = 0,5 dan W = 50 dipertahankan. Ulangan yang
+#               tidak pernah berpindah dihitung sebagai 250 keputusan (seluruh sisa
+#               percobaan), supaya algoritma yang gagal tidak diuntungkan.
+#   seed        pemilihan 1-200; angka yang dilaporkan 1001-1200.
+# ===========================================================================
+KISI_XI = (0.05, 0.1, 0.2, 0.5)
+KISI_W = (25, 50, 100)
+KISI_JARAK = (0.3, 0.1, 0.03)
+FASE_STABIL = ((100, 250), (400, 500))
+DERET_GREEDY = 10
+
+
+def rata_skenario(g):
+    return [0.5 + g, 0.5, 0.4, 0.2], [0.2, 0.4, 0.5, 0.5 + g]
+
+
+class SWUCBCepat:
+    """Perilaku identik dengan SWUCB (diperiksa sapuan_periksa()), dengan
+    statistik window diperbarui bertahap supaya sapuan selesai dalam waktu wajar."""
+
+    def __init__(self, xi, w):
+        self.xi, self.w, self.t = xi, w, 0
+        self.entri = []
+        self.n = [0] * N_ARMS
+        self.s = [0.0] * N_ARMS
+
+    def _buang_lama(self):
+        while self.entri and self.t - self.entri[0][0] >= self.w:
+            _, a, r = self.entri.pop(0)
+            self.n[a] -= 1
+            self.s[a] -= r
+
+    def select(self):
+        self._buang_lama()
+        c = min(self.t, self.w)
+        best, best_s = 0, -math.inf
+        for a in range(N_ARMS):
+            if self.n[a] == 0:
+                sk = math.inf
+            else:
+                mu = self.s[a] / self.n[a]
+                sk = mu if c < 2 else mu + math.sqrt(self.xi * math.log(c) / self.n[a])
+            if sk > best_s:
+                best_s, best = sk, a
+        self.t += 1
+        return best
+
+    def update(self, a, r):
+        self.entri.append((self.t, a, r))
+        self.n[a] += 1
+        self.s[a] += r
+
+    def greedy(self):
+        self._buang_lama()
+        mu = [self.s[a] / self.n[a] if self.n[a] else -math.inf for a in range(N_ARMS)]
+        return max(range(N_ARMS), key=lambda a: (mu[a], -a))
+
+
+class UCB1Xi(UCB1):
+    def __init__(self, xi):
+        super().__init__()
+        self.xi = xi
+
+    def score(self, a):
+        if self.n[a] == 0:
+            return math.inf
+        mu = self.sum[a] / self.n[a]
+        if self.t < 2:
+            return mu
+        return mu + math.sqrt(self.xi * math.log(self.t) / self.n[a])
+
+    def greedy(self):
+        mu = [self.sum[a] / self.n[a] if self.n[a] else -math.inf for a in range(N_ARMS)]
+        return max(range(N_ARMS), key=lambda a: (mu[a], -a))
+
+
+def jalankan_skenario(agen, seed, g):
+    m1, m2 = rata_skenario(g)
+    rng = random.Random(seed)
+    pilih, greedy, regret = [], [], 0.0
+    for t in range(N_ITER):
+        m = m1 if t < CHANGE_AT else m2
+        a = agen.select()
+        agen.update(a, rng.gauss(m[a], STD))
+        pilih.append(a)
+        greedy.append(agen.greedy())
+        regret += max(m) - m[a]
+    target = m2.index(max(m2))
+    dom = None
+    for i in range(CHANGE_AT, N_ITER - JENDELA_DOMINAN):
+        if pilih[i:i + JENDELA_DOMINAN].count(target) / JENDELA_DOMINAN > DOMINAN:
+            dom = i - CHANGE_AT
+            break
+    grd = None
+    for i in range(CHANGE_AT, N_ITER - DERET_GREEDY + 1):
+        if all(x == target for x in greedy[i:i + DERET_GREEDY]):
+            grd = i - CHANGE_AT + 1
+            break
+    porsi = []
+    for (a0, a1), opt in zip(FASE_STABIL, (m1.index(max(m1)), target)):
+        porsi.append(pilih[a0:a1].count(opt) / (a1 - a0))
+    return dom, grd, regret, sum(porsi) / len(porsi)
+
+
+def _sapu_satu(tugas):
+    jenis, xi, w, g, seeds = tugas
+    hasil = []
+    for s in seeds:
+        ag = SWUCBCepat(xi, w) if jenis == "SW-UCB" else UCB1Xi(xi)
+        hasil.append(jalankan_skenario(ag, s, g))
+    return tugas[:4], hasil
+
+
+def sapuan_periksa():
+    """SWUCBCepat harus memilih arm yang sama persis dengan SWUCB."""
+    global XI
+    xi_asli = XI
+    for xi, w, seed in ((0.5, 50, 1), (0.05, 25, 2), (0.2, 100, 3)):
+        XI = xi
+        ref, cep = SWUCB(w=w), SWUCBCepat(xi, w)
+        rng1, rng2 = random.Random(seed), random.Random(seed)
+        for t in range(N_ITER):
+            m = MEAN_FASE1 if t < CHANGE_AT else MEAN_FASE2
+            a1, a2 = ref.select(), cep.select()
+            if a1 != a2:
+                XI = xi_asli
+                raise SystemExit(f"SWUCBCepat berbeda dari SWUCB (xi={xi}, W={w}, t={t})")
+            ref.update(a1, rng1.gauss(m[a1], STD))
+            cep.update(a2, rng2.gauss(m[a2], STD))
+    XI = xi_asli
+    print("Pemeriksaan: SWUCBCepat identik dengan SWUCB pada 3 x 500 keputusan.")
+
+
+def ringkas_ukuran(hasil):
+    dom = [h[0] for h in hasil]
+    grd = [h[1] for h in hasil]
+    sah_d = [x for x in dom if x is not None]
+    sah_g = [x for x in grd if x is not None]
+    sisa = N_ITER - CHANGE_AT
+    return dict(
+        dom_rata=statistics.mean(sah_d) if sah_d else float("nan"),
+        dom_median=statistics.median(sah_d) if sah_d else float("nan"),
+        dom_gagal=dom.count(None),
+        grd_rata=statistics.mean(sah_g) if sah_g else float("nan"),
+        grd_rata_sensor=statistics.mean(x if x is not None else sisa for x in grd),
+        grd_gagal=grd.count(None),
+        regret=statistics.mean(h[2] for h in hasil),
+        porsi=statistics.mean(h[3] for h in hasil),
+    )
+
+
+def sapuan(keluaran_csv):
+    import csv
+    import os
+    from concurrent.futures import ProcessPoolExecutor
+
+    sapuan_periksa()
+    tugas = []
+    for fase, seeds in (("pemilihan", range(1, 201)), ("laporan", range(1001, 1201))):
+        for g in KISI_JARAK:
+            for xi in KISI_XI:
+                tugas.append(("UCB1", xi, 0, g, list(seeds)))
+                for w in KISI_W:
+                    tugas.append(("SW-UCB", xi, w, g, list(seeds)))
+    fase_dari = {1: "pemilihan", 1001: "laporan"}   # seed pertama menentukan fase
+    hasil = {}
+    with ProcessPoolExecutor(max_workers=max(1, (os.cpu_count() or 2) - 1)) as ex:
+        hasil_list = list(ex.map(_sapu_satu, tugas))
+    for t_, (kunci, h) in zip(tugas, hasil_list):
+        hasil[(fase_dari[t_[4][0]],) + kunci] = h
+
+    baris = []
+    for (fase, jenis, xi, w, g), h in sorted(hasil.items(), key=lambda kv: (kv[0][0], kv[0][4], kv[0][2], kv[0][1], kv[0][3])):
+        r = ringkas_ukuran(h)
+        baris.append(dict(fase=fase, jarak=g, agen=jenis, xi=xi, W=w if jenis == "SW-UCB" else "", **r))
+    with open(keluaran_csv, "w", newline="", encoding="utf-8") as f:
+        wr = csv.DictWriter(f, fieldnames=list(baris[0].keys()))
+        wr.writeheader()
+        wr.writerows(baris)
+    print(f"Tabel sapuan lengkap: {keluaran_csv}")
+
+    # ---- pemilihan (seed 1-200) ----
+    def r(fase, jenis, xi, w, g):
+        return ringkas_ukuran(hasil[(fase, jenis, xi, w, g)])
+
+    calon = []
+    print("\nPemilihan (seed 1-200): perpindahan arm greedy rata-rata (gagal = 250), SW-UCB lawan UCB1")
+    for xi in KISI_XI:
+        for w in KISI_W:
+            lolos = all(r("pemilihan", "SW-UCB", xi, w, g)["grd_rata_sensor"]
+                        < r("pemilihan", "UCB1", xi, 0, g)["grd_rata_sensor"] for g in KISI_JARAK)
+            reg = statistics.mean(r("pemilihan", "SW-UCB", xi, w, g)["regret"] for g in KISI_JARAK)
+            teks = "  ".join("g=%.2f %.1f/%.1f" % (g, r("pemilihan", "SW-UCB", xi, w, g)["grd_rata_sensor"],
+                                                   r("pemilihan", "UCB1", xi, 0, g)["grd_rata_sensor"]) for g in KISI_JARAK)
+            print(f"  xi={xi:<4} W={w:<3} {'memenuhi' if lolos else 'tidak   '} regret rata {reg:6.1f} | {teks}")
+            if lolos:
+                calon.append((reg, 0 if w == 50 else 1, -xi, xi, w))
+    if calon:
+        calon.sort()
+        xi_p, w_p = calon[0][3], calon[0][4]
+        print(f"\nTERPILIH: xi = {xi_p}, W = {w_p} (regret SW-UCB rata-rata terkecil di antara yang memenuhi)")
+    else:
+        xi_p, w_p = 0.5, 50
+        print("\nTidak ada pasangan yang memenuhi; xi = 0,5 dan W = 50 dipertahankan.")
+
+    # ---- laporan (seed 1001-1200) untuk pasangan terpilih ----
+    print(f"\nLaporan (seed 1001-1200), xi = {xi_p}, W = {w_p}:")
+    for g in KISI_JARAK:
+        hs = hasil[("laporan", "SW-UCB", xi_p, w_p, g)]
+        hu = hasil[("laporan", "UCB1", xi_p, 0, g)]
+        for nama, h in (("SW-UCB", hs), ("UCB1", hu)):
+            q = ringkas_ukuran(h)
+            print(f"  g={g:<4} {nama:7s} dominansi {q['dom_rata']:6.1f} (median {q['dom_median']:5.1f}, gagal {q['dom_gagal']:3d})"
+                  f" | greedy {q['grd_rata']:6.1f} (gagal {q['grd_gagal']:3d})"
+                  f" | regret {q['regret']:6.1f} | porsi stabil {100 * q['porsi']:5.1f}%")
+        for i_uk, nama_uk in ((0, "dominansi"), (1, "perpindahan greedy")):
+            print(f"  g={g} {nama_uk}: ", end="")
+            uji_berpasangan([h[i_uk] for h in hs], [h[i_uk] for h in hu])
+    return xi_p, w_p
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--ulangan", type=int, default=100)
     p.add_argument("--keluaran", default="konvergensi_tahap0.png")
     p.add_argument("--seed", type=int, default=1)
+    p.add_argument("--sapuan", metavar="CSV",
+                   help="jalankan sapuan xi dan W (arahan 2 Nov 2026) dan tulis tabel lengkap ke CSV")
     a = p.parse_args()
+    if a.sapuan:
+        sapuan(a.sapuan)
+        return
 
     print("Pra-validasi SW-UCB vs UCB1, SOP Tahap 0")
     print(f"W={W_SIZE} xi={XI} iterasi={N_ITER} ganti_di={CHANGE_AT} "
