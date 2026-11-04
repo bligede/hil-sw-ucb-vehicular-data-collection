@@ -53,7 +53,13 @@
 // ============================================================
 #define N_ARMS        4
 #define W_SIZE       50    // panjang sliding window: 50 keputusan terakhir, satu keputusan = satu siklus ACK, satu window untuk semua arm
-#define XI            0.5f // parameter eksplorasi
+// Parameter eksplorasi. Dipilih dengan sapuan xi dan W yang aturannya dikunci sebelum
+// sapuan dijalankan (arahan artikel 2 Nov 2026 butir A.1), disetujui Pembimbing I pada
+// 4 Nov 2026: xi = 0,05 dan W = 50. Nilai ini WAJIB sama dengan konstanta XI pada
+// tools/prevalidasi_swucb.py dan dengan nilai harapan uji unit K1 sampai K7.
+// Batas regret Garivier dan Moulines berlaku untuk xi > 1/2, sehingga tidak berlaku
+// pada nilai ini; pemilihannya empiris.
+#define XI            0.05f
 
 // Arm: {TP dBm, CR (5..8 untuk 4/5..4/8)}
 struct ArmConfig { int8_t tp_dbm; uint8_t cr; };

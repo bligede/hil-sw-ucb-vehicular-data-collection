@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Uji unit agen acuan (prevalidasi_swucb.py) dengan kasus yang sama persis seperti
-node/uji/uji_agen.cpp. Nilai harapan dihitung tangan dari Persamaan (2.5), xi = 0,5;
+node/uji/uji_agen.cpp. Nilai harapan dihitung tangan dari Persamaan (2.5), xi = 0,05;
 lihat kepala berkas uji_agen.cpp. Toleransi 0,0001.
 
 Pemakaian:  python tools/uji_agen.py
@@ -48,36 +48,36 @@ def main():
     for _ in range(2):
         p = ag.select()
         ag.update(p, r[p])
-    periksa("K1b t=4, N=1 semua, pilih Arm 1", ag, [1.332555, 1.232555, 1.132555, 1.032555], 0)
+    periksa("K1b t=4, N=1 semua, pilih Arm 1", ag, [0.763277, 0.663277, 0.563277, 0.463277], 0)
 
     ag = pv.SWUCB(w=5)                                   # K3
     paksa(ag, 1, 0.9)
     for _ in range(5):
         paksa(ag, 0, 0.5)
-    periksa("K3 Arm 2 keluar window, N=0", ag, [0.901178, INF, INF, INF], 1)
+    periksa("K3 Arm 2 keluar window, N=0", ag, [0.626864, INF, INF, INF], 1)
 
     ag = pv.SWUCB(w=5)                                   # K4
     for a, rr in ((0, -1.0), (1, 0.4), (2, 0.3), (3, 0.2), (0, 0.5), (1, 0.4), (2, 0.3)):
         paksa(ag, a, rr)
-    periksa("K4 artefak -1 keluar window", ag, [1.397061, 1.297061, 0.934318, 1.097061], 0)
+    periksa("K4 artefak -1 keluar window", ag, [0.783676, 0.683676, 0.500589, 0.483676], 0)
 
     ag = pv.SWUCB(w=5)                                   # K5
     for a, rr in ((0, 0.5), (1, 0.4), (2, 0.3), (3, 0.2), (-1, 0.0), (0, 0.5)):
         paksa(ag, a, rr)
-    periksa("K5 siklus tanpa reward geser t", ag, [1.397061, 1.297061, 1.197061, 1.097061], 0)
+    periksa("K5 siklus tanpa reward geser t", ag, [0.783676, 0.683676, 0.583676, 0.483676], 0)
 
     ag = pv.SWUCB()                                      # K6, W = 50
     paksa(ag, 1, -0.442)
     for _ in range(49):
         paksa(ag, 0, 0.49)
-    periksa("K6a W=50, t=50, Arm 2 masih di window", ag, [0.689796, 0.956575, INF, INF], 2)
+    periksa("K6a W=50, t=50, Arm 2 masih di window", ag, [0.553181, 0.000268, INF, INF], 2)
     ag.update(0, 0.49)
-    periksa("K6b W=50, t=51, Arm 2 keluar window", ag, [0.687788, INF, INF, INF], 1)
+    periksa("K6b W=50, t=51, Arm 2 keluar window", ag, [0.552546, INF, INF, INF], 1)
 
     ag = pv.UCB1()                                       # K7
     for a, rr in ((0, 0.5), (1, 0.4), (2, 0.3), (3, 0.2), (0, 0.3)):
         paksa(ag, a, rr)
-    periksa("K7 UCB1 t=5, pilih Arm 2", ag, [1.034318, 1.297061, 1.197061, 1.097061], 1)
+    periksa("K7 UCB1 t=5, pilih Arm 2", ag, [0.600589, 0.683676, 0.583676, 0.483676], 1)
 
     print("# HASIL lolos=%d gagal=%d" % (hasil["lolos"], hasil["gagal"]))
     return 1 if hasil["gagal"] else 0

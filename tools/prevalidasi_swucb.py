@@ -38,7 +38,7 @@ import statistics
 # Nilai HARUS sama dengan node/src/config/params.h
 N_ARMS = 4
 W_SIZE = 50
-XI = 0.5
+XI = 0.05
 
 N_ITER = 500
 CHANGE_AT = 250
@@ -397,9 +397,14 @@ def ringkas_ukuran(hasil):
     grd = [h[1] for h in hasil]
     sah_d = [x for x in dom if x is not None]
     sah_g = [x for x in grd if x is not None]
+    # Konvensi ulangan gagal (arahan Pembimbing I 4 Nov 2026, B.1): ulangan yang tidak
+    # pernah re-konvergen dihitung sebagai seluruh sisa percobaan, yaitu 250 keputusan,
+    # pada KEDUA ukuran. Rata-rata tanpa ulangan gagal (dom_rata, grd_rata) tetap
+    # disimpan di CSV untuk pemeriksaan, tetapi angka yang dilaporkan memakai _sensor.
     sisa = N_ITER - CHANGE_AT
     return dict(
         dom_rata=statistics.mean(sah_d) if sah_d else float("nan"),
+        dom_rata_sensor=statistics.mean(x if x is not None else sisa for x in dom),
         dom_median=statistics.median(sah_d) if sah_d else float("nan"),
         dom_gagal=dom.count(None),
         grd_rata=statistics.mean(sah_g) if sah_g else float("nan"),
@@ -464,19 +469,34 @@ def sapuan(keluaran_csv):
         xi_p, w_p = 0.5, 50
         print("\nTidak ada pasangan yang memenuhi; xi = 0,5 dan W = 50 dipertahankan.")
 
-    # ---- laporan (seed 1001-1200) untuk pasangan terpilih ----
-    print(f"\nLaporan (seed 1001-1200), xi = {xi_p}, W = {w_p}:")
+    # ---- Table 5 artikel: pasangan terpilih, seed 1001-1200 ----
+    print(f"\nTable 5 (seed 1001-1200), xi = {xi_p}, W = {w_p}. Rata-rata dengan ulangan gagal = {N_ITER - CHANGE_AT}:")
     for g in KISI_JARAK:
         hs = hasil[("laporan", "SW-UCB", xi_p, w_p, g)]
         hu = hasil[("laporan", "UCB1", xi_p, 0, g)]
         for nama, h in (("SW-UCB", hs), ("UCB1", hu)):
             q = ringkas_ukuran(h)
-            print(f"  g={g:<4} {nama:7s} dominansi {q['dom_rata']:6.1f} (median {q['dom_median']:5.1f}, gagal {q['dom_gagal']:3d})"
-                  f" | greedy {q['grd_rata']:6.1f} (gagal {q['grd_gagal']:3d})"
+            print(f"  g={g:<4} {nama:7s} dominansi {q['dom_rata_sensor']:6.1f} (median {q['dom_median']:5.1f}, gagal {q['dom_gagal']:3d})"
+                  f" | greedy {q['grd_rata_sensor']:6.1f} (gagal {q['grd_gagal']:3d})"
                   f" | regret {q['regret']:6.1f} | porsi stabil {100 * q['porsi']:5.1f}%")
         for i_uk, nama_uk in ((0, "dominansi"), (1, "perpindahan greedy")):
             print(f"  g={g} {nama_uk}: ", end="")
             uji_berpasangan([h[i_uk] for h in hs], [h[i_uk] for h in hu])
+
+    # ---- Table 6 artikel: kepekaan terhadap xi pada UCB1 (arahan 4 Nov 2026, A.2) ----
+    # UCB1 dengan xi yang sama seperti SW-UCB hampir tidak bereksplorasi, sehingga
+    # menjadi pembanding yang lemah. Di sini UCB1 dijalankan pada keempat nilai xi di
+    # kisi, dengan SW-UCB pada pasangan terpilih sebagai acuan.
+    print(f"\nTable 6 (seed 1001-1200): kepekaan UCB1 terhadap xi. Rata-rata dengan "
+          f"ulangan gagal = {N_ITER - CHANGE_AT}; angka dalam kurung adalah jumlah ulangan itu.")
+    print(f"  {'g':<5} {'agen':<22} {'greedy':>14} {'dominansi':>14} {'regret':>8}")
+    for g in KISI_JARAK:
+        baris = [(f"SW-UCB (xi {xi_p}, W {w_p})", hasil[("laporan", "SW-UCB", xi_p, w_p, g)])]
+        baris += [(f"UCB1 xi = {xi}", hasil[("laporan", "UCB1", xi, 0, g)]) for xi in KISI_XI]
+        for nama, h in baris:
+            q = ringkas_ukuran(h)
+            print(f"  {g:<5} {nama:<22} {q['grd_rata_sensor']:8.1f} ({q['grd_gagal']:3d}) "
+                  f"{q['dom_rata_sensor']:8.1f} ({q['dom_gagal']:3d}) {q['regret']:8.1f}")
     return xi_p, w_p
 
 
@@ -516,15 +536,19 @@ def gambar_artikel(berkas, xi, w, g=0.3, seed_contoh=1001, seeds=range(1001, 120
         ax.set_xlabel("decision")
         ax.legend(loc="center right", fontsize=8)
     ax = fig.add_subplot(grid[2])
-    nilai_s = [x for x in gs_ if x is not None]
+    # Konvensi ulangan gagal = 250 pada kedua agen (arahan 4 Nov 2026, B.1). Garis
+    # "30 decisions" dihapus: ambang itu milik ukuran dominansi pada H-Minor 1, bukan
+    # ukuran perpindahan greedy yang digambarkan di sini (B.6).
+    nilai_s = [x if x is not None else sisa for x in gs_]
     nilai_u = [x if x is not None else sisa for x in gu]
     bins = range(0, sisa + 11, 10)
     ax.hist([nilai_s, nilai_u], bins=bins, color=["#4472C4", "#ED7D31"],
-            label=[f"SW-UCB (mean {statistics.mean(nilai_s):.1f})",
-                   f"UCB1 (mean of switching runs {statistics.mean([x for x in gu if x is not None]):.1f}; "
-                   f"{gu.count(None)} runs never switched, shown at {sisa})"])
-    ax.axvline(30, color="red", linestyle="--", label="30 decisions")
-    ax.set_xlabel("decisions after the change until the best estimate moves to the new optimal arm")
+            label=[f"SW-UCB (mean {statistics.mean(nilai_s):.1f}; "
+                   f"{gs_.count(None)} runs never switched)",
+                   f"UCB1 (mean {statistics.mean(nilai_u):.1f}; "
+                   f"{gu.count(None)} runs never switched)"])
+    ax.set_xlabel("decisions after the change until the best estimate moves to the new optimal arm "
+                  f"(runs that never switched are shown at {sisa})")
     ax.set_ylabel("number of runs")
     ax.set_title(f"Greedy switch time over {len(gs_)} runs (seeds {seeds.start} to {seeds.stop - 1})",
                  fontsize=10)

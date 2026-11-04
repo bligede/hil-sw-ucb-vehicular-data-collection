@@ -5,11 +5,11 @@
 // kabel USB. Kasus yang sama persis dijalankan di tools/uji_agen.py terhadap
 // kelas SWUCB dan UCB1 pada tools/prevalidasi_swucb.py.
 //
-// Nilai harapan dihitung langsung dari Persamaan (2.5), xi = 0,5:
-//   bonus(c, N) = sqrt(0,5 * ln c / N),  c = min(t, W) pada SW-UCB, c = t pada UCB1
-//   bonus(4,1) = 0,832555   bonus(5,1) = 0,897061   bonus(5,2) = 0,634318
-//   bonus(5,5) = 0,401178   bonus(50,1) = 1,398575  bonus(50,49) = 0,199796
-//   bonus(50,50) = 0,197788
+// Nilai harapan dihitung langsung dari Persamaan (2.5), xi = 0,05 (disetujui 4 Nov 2026):
+//   bonus(c, N) = sqrt(XI * ln c / N),  c = min(t, W) pada SW-UCB, c = t pada UCB1
+//   bonus(4,1) = 0,263277   bonus(5,1) = 0,283676   bonus(5,2) = 0,200589
+//   bonus(5,5) = 0,126864   bonus(50,1) = 0,442268  bonus(50,49) = 0,063181
+//   bonus(50,50) = 0,062546
 // Toleransi 0,0001, sama dengan toleransi replay berbasis indeks.
 //
 // Env: uji_agen (SW-UCB) dan uji_agen_ucb1 (MODE_UCB1).
@@ -68,7 +68,7 @@ void setup() {
         p = ag.select_arm(); ag.update(p, r[p]);   // keputusan 3: Arm 3
         p = ag.select_arm(); ag.update(p, r[p]);   // keputusan 4: Arm 4
         p = ag.select_arm();
-        const float h3[N_ARMS] = {1.332555f, 1.232555f, 1.132555f, 1.032555f};
+        const float h3[N_ARMS] = {0.763277f, 0.663277f, 0.563277f, 0.463277f};
         periksa("K1b t=4, N=1 semua, pilih Arm 1", ag, p, h3, 0);
     }
     {   // K3: arm keluar dari window, W = 5
@@ -76,7 +76,7 @@ void setup() {
         paksa(ag, 1, 0.9f);
         for (int i = 0; i < 5; i++) paksa(ag, 0, 0.5f);
         uint8_t p = ag.select_arm();
-        const float h[N_ARMS] = {0.901178f, INF, INF, INF};
+        const float h[N_ARMS] = {0.626864f, INF, INF, INF};
         periksa("K3 Arm 2 keluar window, N=0", ag, p, h, 1);
     }
     {   // K4: reward artefak terlupakan, W = 5
@@ -85,7 +85,7 @@ void setup() {
         paksa(ag, 3, 0.2f);  paksa(ag, 0, 0.5f); paksa(ag, 1, 0.4f);
         paksa(ag, 2, 0.3f);
         uint8_t p = ag.select_arm();
-        const float h[N_ARMS] = {1.397061f, 1.297061f, 0.934318f, 1.097061f};
+        const float h[N_ARMS] = {0.783676f, 0.683676f, 0.500589f, 0.483676f};
         periksa("K4 artefak -1 keluar window", ag, p, h, 0);
     }
     {   // K5: siklus terpotong menaikkan t tanpa entri, W = 5
@@ -93,7 +93,7 @@ void setup() {
         paksa(ag, 0, 0.5f); paksa(ag, 1, 0.4f); paksa(ag, 2, 0.3f);
         paksa(ag, 3, 0.2f); paksa(ag, -1, 0.0f); paksa(ag, 0, 0.5f);
         uint8_t p = ag.select_arm();
-        const float h[N_ARMS] = {1.397061f, 1.297061f, 1.197061f, 1.097061f};
+        const float h[N_ARMS] = {0.783676f, 0.683676f, 0.583676f, 0.483676f};
         periksa("K5 siklus tanpa reward geser t", ag, p, h, 0);
     }
     {   // K6: W = 50 produksi, pola rekaman ulang TAHAP43_5M_02
@@ -101,11 +101,11 @@ void setup() {
         paksa(ag, 1, -0.442f);
         for (int i = 0; i < 49; i++) paksa(ag, 0, 0.49f);
         uint8_t p = ag.select_arm();
-        const float h1[N_ARMS] = {0.689796f, 0.956575f, INF, INF};
+        const float h1[N_ARMS] = {0.553181f, 0.000268f, INF, INF};
         periksa("K6a W=50, t=50, Arm 2 masih di window", ag, p, h1, 2);
         ag.update(0, 0.49f);                        // keputusan 51 dipaksa Arm 1
         p = ag.select_arm();
-        const float h2[N_ARMS] = {0.687788f, INF, INF, INF};
+        const float h2[N_ARMS] = {0.552546f, INF, INF, INF};
         periksa("K6b W=50, t=51, Arm 2 keluar window", ag, p, h2, 1);
     }
 #else
@@ -114,7 +114,7 @@ void setup() {
         paksa(ag, 0, 0.5f); paksa(ag, 1, 0.4f); paksa(ag, 2, 0.3f);
         paksa(ag, 3, 0.2f); paksa(ag, 0, 0.3f);
         uint8_t p = ag.select_arm();
-        const float h[N_ARMS] = {1.034318f, 1.297061f, 1.197061f, 1.097061f};
+        const float h[N_ARMS] = {0.600589f, 0.683676f, 0.583676f, 0.483676f};
         periksa("K7 UCB1 t=5, pilih Arm 2", ag, p, h, 1);
     }
 #endif
