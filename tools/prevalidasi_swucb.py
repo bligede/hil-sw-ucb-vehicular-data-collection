@@ -547,8 +547,9 @@ def gambar_artikel(berkas, xi, w, g=0.3, seed_contoh=1001, seeds=range(1001, 120
                    f"{gs_.count(None)} runs never switched)",
                    f"UCB1 (mean {statistics.mean(nilai_u):.1f}; "
                    f"{gu.count(None)} runs never switched)"])
-    ax.set_xlabel("decisions after the change until the best estimate moves to the new optimal arm "
-                  f"(runs that never switched are shown at {sisa})")
+    # Label dipendekkan (arahan 10 Nov 2026, butir 8): label lama lebih lebar daripada
+    # grafiknya, dan konvensi gagal = 250 sudah tertulis di keterangan gambar.
+    ax.set_xlabel("decisions after the change")
     ax.set_ylabel("number of runs")
     ax.set_title(f"Greedy switch time over {len(gs_)} runs (seeds {seeds.start} to {seeds.stop - 1})",
                  fontsize=10)
