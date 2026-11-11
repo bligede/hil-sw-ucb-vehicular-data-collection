@@ -596,6 +596,14 @@ def main():
     rata_ucb, teks_ucb = ringkas("UCB1", ucb)
     print(teks_sw)
     print(teks_ucb)
+    # Konvensi artikel (arahan 4 Nov 2026, A.4 dan B.1): ulangan yang tidak pernah
+    # re-konvergen dihitung 250 keputusan. Baris di atas tetap dicetak apa adanya
+    # (rata-rata tanpa ulangan gagal) supaya keluaran lama dapat dicocokkan.
+    sisa = N_ITER - CHANGE_AT
+    print(f"  Dengan ulangan gagal dihitung {sisa} keputusan:")
+    for nama, h in (("SW-UCB", sw), ("UCB1", ucb)):
+        v = [x if x is not None else sisa for x in h]
+        print(f"    {nama:8s}: rata {statistics.mean(v):6.1f}   median {statistics.median(v):5.1f}")
     print()
 
     uji_berpasangan(sw, ucb)
