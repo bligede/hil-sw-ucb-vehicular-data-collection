@@ -110,7 +110,10 @@ static void lapor(uint8_t arm_kode, uint16_t siklus, uint32_t rusak_ini) {
 
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_NSS);
     LoRa.setPins(LORA_NSS, LORA_RESET, LORA_DIO0);
-    if (!LoRa.begin(433E6)) return;
+    if (!LoRa.begin(433E6)) {
+        Serial.println("# LoRa.begin GAGAL, siklus ini tanpa laporan radio");
+        return;
+    }
     LoRa.setSpreadingFactor(8);
     LoRa.setSignalBandwidth(125E3);
     LoRa.setPreambleLength(8);
@@ -131,14 +134,22 @@ static void lapor(uint8_t arm_kode, uint16_t siklus, uint32_t rusak_ini) {
     for (int k = 0; k < 3; k++) {
         LoRa.beginPacket();
         LoRa.write(buf, 12);
-        LoRa.endPacket();
+        int ok = LoRa.endPacket();
+        Serial.printf("# kirim ke-%d arm=%u siklus=%u vbus=%.3f endPacket=%d\n",
+                      k + 1, (unsigned)arm_kode, (unsigned)siklus, vbus, ok);
         delay(150);
     }
     LoRa.sleep();
+    Serial.flush();
 }
 
 void setup() {
+    // Cetakan serial hanya untuk diagnosis di meja (ditambahkan 14 Nov 2026); pada uji
+    // dari baterai tanpa USB, hasil tetap dibaca dari gateway.
+    Serial.begin(115200);
     esp_sleep_wakeup_cause_t sebab = esp_sleep_get_wakeup_cause();
+    Serial.printf("# uji_rtc_ram tidur=%u s, sebab bangun=%d, penanda=%s\n", (unsigned)UJI_TIDUR_S,
+                  (int)sebab, rtc_penanda == MAGIC ? "sah" : "kosong");
     bool dari_timer = (sebab == ESP_SLEEP_WAKEUP_TIMER);
 
     if (rtc_penanda != MAGIC) {
