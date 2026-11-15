@@ -99,7 +99,8 @@ function doPost(e) {
   }
 }
 
-/** Gateway menanyakan id_window yang sedang berlaku. */
+/** Gateway menanyakan id_window yang sedang berlaku (aksi=window); laptop membaca
+ *  baris terakhir LOG (aksi=ekor&n=...). Keduanya memerlukan token. */
 function doGet(e) {
   var p = (e && e.parameter) || {};
   if (!tokenSah(p.t)) return jawab({ ok: false, error: 'token' });
@@ -109,6 +110,18 @@ function doGet(e) {
     // Hanya huruf, angka, titik, garis bawah, dan tanda hubung; maksimal 31 karakter.
     id = id.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 31);
     return jawab({ ok: true, id_window: id });
+  }
+  if (p.aksi === 'ekor') {
+    // Baca-saja: n baris terakhir lembar LOG (bawaan 200, paling banyak 5000), untuk
+    // memantau rekaman dari laptop tanpa kabel serial. Tidak mengubah isi spreadsheet.
+    var lg = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NAMA_LOG);
+    if (!lg) return jawab({ ok: false, error: 'lembar_log_belum_ada' });
+    var n = Math.min(Math.max(parseInt(p.n, 10) || 200, 1), 5000);
+    var akhir = lg.getLastRow();
+    if (akhir < 2) return jawab({ ok: true, total: 0, kolom: KOLOM, baris: [] });
+    var mulai = Math.max(2, akhir - n + 1);
+    var isiLog = lg.getRange(mulai, 1, akhir - mulai + 1, KOLOM.length).getValues();
+    return jawab({ ok: true, total: akhir - 1, baris_awal: mulai, kolom: KOLOM, baris: isiLog });
   }
   return jawab({ ok: true, pesan: 'gateway-sheets siap' });
 }
