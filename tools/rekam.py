@@ -40,7 +40,10 @@ def buka_tanpa_reset(port, baud=115200):
     return s
 
 
-def rekam(s, berkas, kepala, berhenti, catatan):
+def rekam(s, berkas, kepala, berhenti, catatan, penanda=None):
+    """penanda: daftar (list) bersama; setiap teks yang dimasukkan skrip pemanggil ditulis ke berkas sebagai
+    satu baris komentar dengan cap waktu laptop, misalnya baris # RESET_SENGAJA sebelum skrip sengaja
+    me-reset gateway (arahan Pembimbing I 19 Nov 2026)."""
     with open(berkas, "w", encoding="utf-8", newline="") as f:
         if kepala:
             f.write(kepala)
@@ -48,6 +51,9 @@ def rekam(s, berkas, kepala, berhenti, catatan):
         f.flush()
         n = 0
         while not berhenti.is_set():
+            while penanda:
+                f.write("\n# %s %s\n" % (penanda.pop(0), time.strftime("%Y-%m-%d %H:%M:%S")))
+                f.flush()
             d = s.read(512)
             if d:
                 teks = d.decode("utf-8", "replace")
