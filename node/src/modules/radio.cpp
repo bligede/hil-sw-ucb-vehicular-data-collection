@@ -25,10 +25,34 @@ bool radio_init() {
     return true;
 }
 
+#ifdef CETAK_REG_PA
+// Hanya untuk build uji (arahan Pembimbing I 19 Nov 2026 nomor 3): baca balik register daya
+// sesudah setTxPower(), langsung lewat SPI karena readRegister() pustaka bersifat private.
+// Pengaturan daya TIDAK diubah; build resmi (tanpa -DCETAK_REG_PA) tidak berubah.
+static uint8_t baca_reg(uint8_t a) {
+    SPI.beginTransaction(SPISettings(8E6, MSBFIRST, SPI_MODE0));   // sama dengan pustaka LoRa
+    digitalWrite(LORA_NSS, LOW);
+    SPI.transfer(a & 0x7F);
+    uint8_t v = SPI.transfer(0);
+    digitalWrite(LORA_NSS, HIGH);
+    SPI.endTransaction();
+    return v;
+}
+#endif
+
 void radio_set_arm(uint8_t arm_idx) {
     if (arm_idx >= N_ARMS) arm_idx = 0;
     LoRa.setTxPower(ARM_CONFIG[arm_idx].tp_dbm);
     LoRa.setCodingRate4(ARM_CONFIG[arm_idx].cr);
+#ifdef CETAK_REG_PA
+    static int8_t arm_lalu = -1;   // cetak sekali tiap arm berganti, bukan tiap paket
+    if ((int8_t)arm_idx != arm_lalu) {
+        arm_lalu = (int8_t)arm_idx;
+        Serial.printf("REGPA,arm=%u,tp=%d,PaConfig=0x%02X,PaDac=0x%02X,Ocp=0x%02X,ModemConfig1=0x%02X\n",
+                      (unsigned)(arm_idx + 1), (int)ARM_CONFIG[arm_idx].tp_dbm,
+                      baca_reg(0x09), baca_reg(0x4D), baca_reg(0x0B), baca_reg(0x1D));
+    }
+#endif
 }
 
 int radio_scan_beacon() {

@@ -56,7 +56,14 @@ static void tidur(uint64_t detik) {
 static void kirim_satu_paket() {
 #if MODE_SWEEP_AKTIF
     // Arm tetap sepanjang satu siklus ACK; berganti di evaluasi_reward().
-    uint8_t arm_idx = rtc_sweep_arm;
+    // SWEEP_URUTAN (indeks 0-based) mengatur urutan giliran; bawaan 1, 2, 3, 4.
+    // C.3 (catatan 2 Nov 2026) meminta urutan diubah, misalnya 3, 1, 4, 2.
+#ifdef SWEEP_URUTAN_3142
+    static const uint8_t SWEEP_URUTAN[N_ARMS] = {2, 0, 3, 1};
+#else
+    static const uint8_t SWEEP_URUTAN[N_ARMS] = {0, 1, 2, 3};
+#endif
+    uint8_t arm_idx = SWEEP_URUTAN[rtc_sweep_arm % N_ARMS];
 #else
     // Satu keputusan per siklus ACK (naskah Bab III): arm dipilih pada paket pertama
     // siklus dan dipakai sepuluh paket, sehingga t naik satu per siklus. rtc_ack_counter
