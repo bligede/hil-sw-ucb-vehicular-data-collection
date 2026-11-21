@@ -149,6 +149,13 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
   #define V_BATT_MIN         4.10f
   #define V_BATT_PULIH       4.00f
   #define GUARD_SLEEP_S      10ULL
+#elif defined(UJI_GUARD_NYATA)
+  // HANYA untuk uji BATTERY_GUARD dengan sel lapangan (catatan Pembimbing I 2 Nov 2026 C.4; env
+  // uji_guard_nyata): ambang ASLI 3,3 V dan 3,5 V, tetapi tidur guard dipersingkat ke 60 s supaya keluar dari
+  // guard terlihat dalam satu sesi. Logika guard sama dengan firmware resmi.
+  #define V_BATT_MIN         3.30f
+  #define V_BATT_PULIH       3.50f
+  #define GUARD_SLEEP_S      60ULL
 #else
   #define V_BATT_MIN         3.30f   // masuk BATTERY_GUARD
   #define V_BATT_PULIH       3.50f   // keluar dari BATTERY_GUARD
