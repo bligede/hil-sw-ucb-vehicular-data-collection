@@ -95,14 +95,16 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 #endif
 
 // Energi maksimum per transmisi (Arm 4), penyebut normalisasi.
-// WAJIB diganti hasil pengukuran SOP Tahap 4.1 sebelum eksperimen utama.
-// Nilai awal di bawah adalah ESTIMASI dari topologi daya pada Panduan Perakitan
-// Subbab II.1 (baterai -> INA219 -> MT3608 5 V -> VIN).
-// Hasil Tahap 4.1 (25 Okt 2026): Arm 4 = 93,1 sampai 93,7 mJ pada dua rekaman,
-// ketidakpastian sekitar 5 persen. USULAN, menunggu keputusan Pembimbing I
-// (lihat Laporan Hasil Tahap 4.1). Dipakai untuk uji laboratorium Tahap 4.3.
-#define E_MAKS_mJ      93.7f
-#define E_MAKS_TERUKUR 1      // 1 = nilai hasil ukur Tahap 4.1
+// Rantai catu (D19 final, disetujui Pembimbing I 19 Nov 2026): sel 18650 (SEL-B1) -> TP4056 berproteksi
+// (DW01 + FS8205) -> INA219 (modul cadangan) -> J5019 (penaik tegangan) -> saklar -> VIN ESP32.
+// Panduan Perakitan lama menulis MT3608; yang terpasang sejak awal adalah J5019.
+// Nilai di bawah: sweep dingin butir 5 (arahan Pembimbing I 15 Nov 2026) pada rakitan beku 20 Nov 2026,
+// 21 Nov 2026 16:30-16:47, median Arm 4 80,500 mJ (n 341, p10-p90 80,33-80,62) dibulatkan ke atas
+// ke 0,1 mJ; ulangan 20 Nov memberi median 80,45. Data: data/butir5/sweep_dingin_21nov_*.
+// Riwayat: 93,7 mJ (Tahap 4.1, 25 Okt 2026) dipakai sampai 21 Nov 2026; nilai itu diukur dengan modul
+// INA219 lama yang membaca sekitar 7 % terlalu tinggi dan tidak lagi berlaku untuk rakitan beku.
+#define E_MAKS_mJ      80.5f
+#define E_MAKS_TERUKUR 1      // 1 = nilai hasil ukur sweep dingin butir 5
 
 #define REWARD_TIMEOUT (-1.0f) // penalti bila ACK tidak diterima; konsisten
                                // dengan batas bawah rentang reward [-1, +1]

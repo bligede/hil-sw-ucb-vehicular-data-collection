@@ -41,8 +41,8 @@ reward dijalankan sesudah `E_MAKS_mJ` diisi hasil kalibrasi INA219 di Tahap 4.1.
 
 | Peran | Komponen |
 | --- | --- |
-| Node sensor statis | ESP32 DevKit v1, LoRa SX1278 (Ra-02) 433 MHz, INA219, ADXL345, 18650, TP4056 berproteksi, MT3608, panel surya 1,1 W |
-| Mobile gateway | ESP32 DevKit v1, LoRa SX1278, daya USB dari laptop |
+| Node sensor statis | ESP32 DevKit v1, LoRa SX1278 (Ra-02) 433 MHz, INA219, ADXL345, 18650, TP4056 berproteksi, J5019 (penaik tegangan; Panduan lama menulis MT3608), panel surya 1,1 W. Rantai catu: sel -> TP4056 -> INA219 -> J5019 -> saklar -> VIN (D19 final, 19 Nov 2026) |
+| Mobile gateway | ESP32 DevKit v1, LoRa SX1278, dicatu charger HP lewat USB ESP32 (VIN terukur sekitar 4,37 V, bukan 5 V); log lewat adaptor CP2102 di TX0 |
 
 Spreading Factor dikunci pada SF8 dan Bandwidth pada 125 kHz sebagai variabel
 kontrol, karena gateway berbiaya rendah bersifat single-channel dan tidak dapat

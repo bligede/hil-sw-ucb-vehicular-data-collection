@@ -64,7 +64,7 @@ static void cetak_parameter() {
     Serial.printf ("  xi=%.2f  alpha=%.2f  beta=%.2f\n", XI, ALPHA, BETA);
 #endif
     Serial.printf ("  E_maks=%.1f mJ  %s\n", E_MAKS_mJ,
-                   E_MAKS_TERUKUR ? "(terukur Tahap 4.1)"
+                   E_MAKS_TERUKUR ? "(terukur sweep dingin butir 5, 21 Nov 2026)"
                                   : "(ESTIMASI - belum diukur)");
     Serial.printf ("  RSSI detect=%d exit=%d  %s\n", RSSI_DETECT, RSSI_EXIT,
                    RSSI_TERKALIBRASI ? "(terkalibrasi Tahap 4.5)"
