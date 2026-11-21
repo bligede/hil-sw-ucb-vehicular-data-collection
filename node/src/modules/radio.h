@@ -35,8 +35,11 @@ bool radio_kendaraan_terdeteksi();
 float radio_kirim_paket(const Payload& p);
 
 // Tunggu ACK dari gateway sampai ACK_TIMEOUT_MS.
+// Hanya ACK 5 byte yang penanda siklusnya sama dengan seq_awal_harap (nomor urut
+// paket berindeks 0 pada siklus node) yang diterima; ACK lain dicetak sebagai
+// ACK_TOLAK dan penantian berlanjut sampai batas waktu.
 // Mengembalikan jumlah paket yang diterima gateway, atau -1 bila kehabisan waktu.
-int radio_tunggu_ack();
+int radio_tunggu_ack(uint16_t seq_awal_harap);
 
 int  radio_rssi_terakhir();
 void radio_tidur();

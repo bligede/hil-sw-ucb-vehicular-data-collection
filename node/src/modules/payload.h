@@ -15,7 +15,7 @@
 //
 //  Byte | Isi                              | Format
 //  -----+----------------------------------+---------------------------------
-//   0   | Nomor arm terpilih               | uint8, 1..4
+//   0   | Indeks paket di siklus dan arm   | (indeks << 4) | arm; indeks 0..9, arm 1..4
 //   1-2 | Nomor urut paket                 | uint16 big-endian
 //   3-4 | Energi transmisi paket sebelumnya| uint16 BE, satuan 0,1 mJ
 //   5   | Tegangan baterai                 | uint8, (V - 2,50) * 100
@@ -23,12 +23,18 @@
 //
 // Ukuran 12 byte inilah yang dipakai pada seluruh perhitungan waktu udara di
 // Dokumen Kerja Revisi (82,4 ms Arm 1 sampai 107,0 ms Arm 4).
+//
+// Indeks paket di dalam siklus (node-1.3, catatan Pembimbing I 1 Nov 2026 B.3)
+// menempati 4 bit atas byte 0 yang sebelumnya selalu nol, sehingga panjang
+// muatan tetap 12 byte. Gateway memakainya untuk menutup siklus berdasarkan
+// posisi paket. Lihat config/protocol.h.
 
 #pragma once
 #include <Arduino.h>
 
 struct Payload {
     uint8_t  arm;        // 1..4 (bukan 0..3) agar sama dengan penomoran naskah
+    uint8_t  indeks = 0; // posisi paket di siklus ACK, 0..9; program uji tanpa siklus memakai 0
     uint16_t seq;
     float    e_prev_mJ;
     float    vbatt_V;

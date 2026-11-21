@@ -117,25 +117,43 @@ float radio_kirim_paket(const Payload& p) {
     return energy_end_mJ();
 }
 
-int radio_tunggu_ack() {
+int radio_tunggu_ack(uint16_t seq_awal_harap) {
     LoRa.receive();
     uint32_t t0 = millis();
     int hasil = -1;
 
     while (millis() - t0 < ACK_TIMEOUT_MS) {
         int size = LoRa.parsePacket();
-        if (size >= 3) {
-            uint8_t b0 = (uint8_t)LoRa.read();
-            uint8_t b1 = (uint8_t)LoRa.read();
-            uint8_t n  = (uint8_t)LoRa.read();
-            while (LoRa.available()) LoRa.read();
+        if (size <= 0) continue;
 
-            if (b0 == ACK_B0 && b1 == ACK_B1) {
-                hasil = (int)n;
-                s_rssi_terakhir = LoRa.packetRssi();
-                break;
-            }
+        uint8_t buf[ACK_LEN] = {0};
+        int i = 0;
+        while (LoRa.available()) {
+            uint8_t b = (uint8_t)LoRa.read();
+            if (i < ACK_LEN) buf[i] = b;
+            i++;
         }
+        if (size < 2 || buf[0] != ACK_B0 || buf[1] != ACK_B1) continue;   // beacon atau derau
+
+        if (size != ACK_LEN) {
+            // Penanda ACK dengan panjang lain: biasanya ACK 3 byte gateway lama.
+            Serial.printf("ACK_TOLAK panjang=%d harap=%u\n", size, (unsigned)ACK_LEN);
+            continue;
+        }
+
+        // Penanda siklus (B.3): ACK milik siklus lain, misalnya ACK siklus
+        // sebelumnya yang dikirim terlambat, tidak boleh menjadi reward siklus ini.
+        const uint16_t penanda = (uint16_t)((uint16_t)buf[3] << 8 | buf[4]);
+        if (penanda != seq_awal_harap) {
+            Serial.printf("ACK_TOLAK penanda=%u harap=%u\n",
+                          (unsigned)penanda, (unsigned)seq_awal_harap);
+            continue;
+        }
+
+        hasil = (int)buf[2];
+        s_rssi_terakhir = LoRa.packetRssi();
+        Serial.printf("ACK_TERIMA n=%d penanda=%u\n", hasil, (unsigned)penanda);
+        break;
     }
 
     LoRa.idle();

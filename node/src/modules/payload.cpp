@@ -1,8 +1,12 @@
 #include "payload.h"
 #include "../config/params.h"
+#include "../config/protocol.h"
+
+static_assert(ACK_SETIAP_N <= 16, "indeks paket harus muat di 4 bit atas byte 0");
 
 uint8_t payload_pack(const Payload& p, uint8_t* buf) {
-    buf[0] = p.arm;
+    // Byte 0: indeks di 4 bit atas, arm di 4 bit bawah (protocol.h).
+    buf[0] = (uint8_t)((uint8_t)(p.indeks << PAKET_INDEKS_GESER) | (p.arm & PAKET_ARM_MASK));
 
     buf[1] = (uint8_t)(p.seq >> 8);
     buf[2] = (uint8_t)(p.seq & 0xFF);
@@ -34,7 +38,8 @@ uint8_t payload_pack(const Payload& p, uint8_t* buf) {
 bool payload_unpack(const uint8_t* buf, uint8_t len, Payload& p) {
     if (len != PAYLOAD_LEN) return false;
 
-    p.arm = buf[0];
+    p.arm    = buf[0] & PAKET_ARM_MASK;
+    p.indeks = buf[0] >> PAKET_INDEKS_GESER;
     p.seq = (uint16_t)((uint16_t)buf[1] << 8 | buf[2]);
 
     uint16_t e_raw = (uint16_t)((uint16_t)buf[3] << 8 | buf[4]);

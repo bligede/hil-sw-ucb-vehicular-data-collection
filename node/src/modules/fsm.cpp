@@ -19,8 +19,45 @@ extern uint32_t rtc_cooldown_sampai_s;
 extern uint32_t rtc_uptime_s;
 extern bool     rtc_dalam_guard;
 extern uint8_t  rtc_sweep_arm;
+extern uint16_t rtc_seq_awal;
+#ifdef UJI_HILANG
+extern uint8_t  rtc_uji_kasus;
+#endif
 
 extern SW_UCB_Agent agent;
+
+#ifdef UJI_HILANG
+// Saklar uji penyisipan kehilangan paket (catatan Pembimbing I 1 Nov 2026, B.3).
+// HANYA untuk env uji_hilang, bukan firmware penelitian. Pola paket yang tidak
+// dipancarkan berganti tiap siklus ACK mengikuti daftar berulang di bawah; bit k
+// menyala berarti paket berindeks k dilewati. Paket yang dilewati tetap dihitung
+// terkirim (rtc_ack_counter dan rtc_pkt_seq naik), dan node tetap menunggu
+// selama waktu udara paket itu supaya jadwal siklus sama dengan pancaran nyata.
+static const uint16_t UJI_HILANG_POLA[] = {
+    0,                               // kasus 0: tidak ada
+    (1u << 5),                       // kasus 1: satu di tengah
+    (1u << 4) | (1u << 5),           // kasus 2: dua berturut-turut di tengah
+    (1u << 8) | (1u << 9),           // kasus 3: dua terakhir
+    (1u << 7) | (1u << 8) | (1u << 9), // kasus 4: tiga terakhir
+    (1u << 0),                       // kasus 5: paket pertama
+};
+static const uint8_t UJI_HILANG_N_KASUS = sizeof(UJI_HILANG_POLA) / sizeof(UJI_HILANG_POLA[0]);
+// Waktu udara terukur per arm (DOKUMENTASI_FIRMWARE.md Bagian 4.1), dibulatkan ke ms.
+static const uint16_t UJI_HILANG_WAKTU_UDARA_MS[N_ARMS] = {83, 83, 99, 107};
+static uint16_t s_pola_lewati = 0;
+
+static void cetak_kasus_uji(uint8_t kasus, uint16_t pola) {
+    char daftar[40];
+    int pos = 0;
+    daftar[0] = '\0';
+    for (uint8_t k = 0; k < ACK_SETIAP_N; k++) {
+        if (pola & (1u << k)) {
+            pos += snprintf(daftar + pos, sizeof(daftar) - pos, "%s%u", pos ? "," : "", (unsigned)k);
+        }
+    }
+    Serial.printf("UJI_HILANG kasus=%u lewati={%s}\n", (unsigned)kasus, daftar);
+}
+#endif
 
 static FSMState s_state = STATE_IDLE;
 static uint32_t s_t_masuk_window = 0;
@@ -86,15 +123,43 @@ static void kirim_satu_paket() {
 #endif
     rtc_arm_sekarang = arm_idx;
 
+    // Indeks paket di dalam siklus = rtc_ack_counter sebelum dinaikkan: 0 pada paket
+    // pertama sesudah evaluasi reward, masuk window, maupun keluar karena timeout_window
+    // (ketiganya mengosongkan rtc_ack_counter). Penanda siklus adalah nomor urut paket
+    // berindeks 0; ACK yang penandanya lain ditolak di radio_tunggu_ack() (B.3).
+    const uint8_t indeks = (uint8_t)rtc_ack_counter;
+    if (indeks == 0) {
+        rtc_seq_awal = rtc_pkt_seq;
+#ifdef UJI_HILANG
+        s_pola_lewati = UJI_HILANG_POLA[rtc_uji_kasus % UJI_HILANG_N_KASUS];
+        cetak_kasus_uji((uint8_t)(rtc_uji_kasus % UJI_HILANG_N_KASUS), s_pola_lewati);
+        rtc_uji_kasus = (uint8_t)((rtc_uji_kasus + 1) % UJI_HILANG_N_KASUS);
+#endif
+    }
+
     int16_t ax, ay, az;
     sensor_baca_mg(ax, ay, az);
 
     Payload p;
     p.arm       = (uint8_t)(arm_idx + 1);   // muatan memakai penomoran 1..4
+    p.indeks    = indeks;
     p.seq       = rtc_pkt_seq;
     p.e_prev_mJ = rtc_e_prev_mJ;            // energi paket sebelumnya (D6)
     p.vbatt_V   = rtc_vbatt;
     p.ax = ax; p.ay = ay; p.az = az;
+
+#ifdef UJI_HILANG
+    if (s_pola_lewati & (1u << indeks)) {
+        // Tidak dipancarkan; energi dicatat 0, jadwal dijaga dengan menunggu waktu udaranya.
+        delay(UJI_HILANG_WAKTU_UDARA_MS[arm_idx]);
+        rtc_e_prev_mJ = 0.0f;
+        rtc_pkt_seq++;
+        rtc_ack_counter++;
+        Serial.printf("LEWATI seq=%u indeks=%u\n", (unsigned)p.seq, (unsigned)indeks);
+        if (rtc_ack_counter >= ACK_SETIAP_N) s_state = STATE_REWARD_EVAL;
+        return;
+    }
+#endif
 
     float e_mJ = radio_kirim_paket(p);
 
@@ -103,9 +168,10 @@ static void kirim_satu_paket() {
     rtc_pkt_seq++;
     rtc_ack_counter++;
 
-    Serial.printf("TX seq=%u arm=%u e=%.2fmJ n=%u\n",
+    // k = indeks paket di siklus, ditambahkan di ujung baris pada node-1.3.
+    Serial.printf("TX seq=%u arm=%u e=%.2fmJ n=%u k=%u\n",
                   (unsigned)p.seq, (unsigned)p.arm, e_mJ,
-                  (unsigned)energy_jumlah_sampel());
+                  (unsigned)energy_jumlah_sampel(), (unsigned)indeks);
 
     if (rtc_ack_counter >= ACK_SETIAP_N) s_state = STATE_REWARD_EVAL;
 }
@@ -130,7 +196,7 @@ static void kirim_satu_paket() {
 // kendaraan menjauh, bukan akibat pilihan arm. Pengaruhnya melemah seiring
 // bertambahnya jumlah jendela dan perlu disebut di Bab Pembahasan.
 static void evaluasi_reward() {
-    int n_diterima = radio_tunggu_ack();
+    int n_diterima = radio_tunggu_ack(rtc_seq_awal);
     float reward;
     bool kendaraan_pergi = false;
 

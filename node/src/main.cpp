@@ -36,6 +36,10 @@ RTC_DATA_ATTR uint32_t rtc_uptime_s          = 0;
 RTC_DATA_ATTR bool     rtc_dalam_guard       = false;
 RTC_DATA_ATTR uint32_t rtc_penanda_sah       = 0;
 RTC_DATA_ATTR uint8_t  rtc_sweep_arm         = 0;   // giliran arm, mode sweep
+RTC_DATA_ATTR uint16_t rtc_seq_awal          = 0;   // penanda siklus: seq paket berindeks 0 (B.3)
+#ifdef UJI_HILANG
+RTC_DATA_ATTR uint8_t  rtc_uji_kasus         = 0;   // kasus berikutnya, env uji_hilang saja
+#endif
 
 // Nilai berganti bila tata letak RTC berubah, supaya keadaan lama tidak dibaca
 // dengan susunan baru. "WUC2": AgentState dengan window bersama (firmware 1.2).
@@ -94,6 +98,10 @@ static void cetak_parameter() {
     Serial.println("  PERINGATAN: pencuplikan saat TX dimatikan. Energi akan");
     Serial.println("              seragam antar-arm. Hanya untuk pembanding.");
 #endif
+#ifdef UJI_HILANG
+    Serial.println("  PERINGATAN: UJI_HILANG aktif. Node sengaja melewatkan paket per pola");
+    Serial.println("              {}, {5}, {4,5}, {8,9}, {7,8,9}, {0}. Bukan firmware penelitian.");
+#endif
     Serial.println("=====================================================");
 }
 
@@ -112,6 +120,10 @@ static void reset_keadaan_agen(const char* sebab) {
     rtc_cooldown_sampai_s = 0;
     rtc_uptime_s          = 0;
     rtc_sweep_arm         = 0;
+    rtc_seq_awal          = 0;
+#ifdef UJI_HILANG
+    rtc_uji_kasus         = 0;
+#endif
     rtc_penanda_sah       = PENANDA_SAH;
 }
 

@@ -3,7 +3,7 @@
 Arsitektur Edge-AI untuk Kendali Transmisi Otonom LoRa pada Pengumpulan Data Kendaraan: Implementasi Algoritma Sliding-Window Upper Confidence Bound pada Kanal Non-Stasioner Kendaraan.
 
 Penulis: I Gede Wahyu Wiranata (NIM 2481711013), Magister Teknik Elektro, Universitas Udayana.
-Versi firmware: node-1.2-swucb, node-1.2-ucb1, node-1.2-sweep, dan gateway-1.4. Tanggal dokumen: 1 November 2026. Perubahan dari 1.1: agen mengikuti Persamaan 2.5 dan 2.6 (window bersama, xi di dalam akar), node mencetak indeks tiap keputusan, gateway tidak lagi mengosongkan pencacah saat ID window berganti, mencetak # GATEWAY_BOOT, dan ACK_IDLE_MS 1400 ms untuk uji laboratorium.
+Versi firmware: node-1.3-swucb, node-1.3-ucb1, node-1.3-sweep, dan gateway-1.5 (wajib berpasangan). Tanggal dokumen: 21 November 2026. Perubahan dari node-1.2 dan gateway-1.4 (catatan Pembimbing I 1 Nov 2026, B.3): byte 0 muatan membawa indeks paket di siklus, gateway menutup siklus berdasarkan posisi paket (ACK_IDLE_MS dihapus), ACK 5 byte membawa penanda siklus yang diperiksa node, beacon diam 7000 ms, dan env uji `uji_hilang`. Perubahan 1.2 dari 1.1: agen mengikuti Persamaan 2.5 dan 2.6 (window bersama, xi di dalam akar), node mencetak indeks tiap keputusan, gateway tidak lagi mengosongkan pencacah saat ID window berganti dan mencetak # GATEWAY_BOOT.
 
 ## 1. Ikhtisar sistem
 
@@ -15,7 +15,7 @@ Firmware ini menjalankan eksperimen Hardware-in-the-Loop (HIL) untuk menguji alg
  daya: baterai 18650 -> INA219 -> J5019 -> VIN     tambahan: LCD 20x4, dua biled
         |                                                  |
         |  paket data 12 byte  -------------------->       |--> serial USB: CSV ke laptop
-        |  <------------------- beacon 2 byte, ACK 3 byte  |--> WiFi hotspot: Google Sheets (opsional)
+        |  <------------------- beacon 2 byte, ACK 5 byte  |--> WiFi hotspot: Google Sheets (opsional)
         433 MHz, SF8, BW 125 kHz
 ```
 
@@ -67,6 +67,7 @@ Alat yang dipakai adalah PlatformIO dengan framework Arduino untuk ESP32. Node d
 | node | `uji_rtc_ram`, `uji_rtc_60s`, `uji_rtc_3600s` | uji persistensi RTC RAM (Tahap 4.2) |
 | node | `uji_guard` | uji logika BATTERY_GUARD (Tahap 4.4) |
 | node | `uji_agen`, `uji_agen_ucb1` | uji unit agen dengan riwayat hitung tangan |
+| node | `uji_hilang` | firmware node dengan penyisipan kehilangan paket (`-DUJI_HILANG`), uji penutupan siklus B.3 |
 | gateway | `esp32dev` | gateway dengan keluaran serial |
 | gateway | `esp32dev_sheets` | gateway dengan unggah ke Google Sheets |
 
@@ -105,7 +106,7 @@ Gateway memancarkan beacon dan ACK pada 17 dBm, CR 4/5.
 
 | Byte | Isi | Format |
 |---|---|---|
-| 0 | nomor arm | uint8, 1 sampai 4 |
+| 0 | indeks paket di siklus (4 bit atas) dan nomor arm (4 bit bawah) | `(indeks << 4) \| arm`, indeks 0 sampai 9, arm 1 sampai 4 (0x01 sampai 0x94) |
 | 1 sampai 2 | nomor urut paket | uint16 big-endian |
 | 3 sampai 4 | energi transmisi paket sebelumnya | uint16 big-endian, satuan 0,1 mJ |
 | 5 | tegangan baterai | uint8, (V - 2,50) x 100 |
@@ -113,9 +114,11 @@ Gateway memancarkan beacon dan ACK pada 17 dBm, CR 4/5.
 
 Energi yang dikirim adalah energi paket sebelumnya, karena energi paket berjalan baru selesai dihitung sesudah transmisinya tuntas (penyimpangan D6). Pengolah log menggesernya kembali.
 
+Indeks paket (node-1.3) adalah posisi paket di siklus ACK, yaitu `rtc_ack_counter` sebelum dinaikkan (0 untuk paket pertama siklus). Indeks menempati 4 bit atas byte 0 yang sebelumnya selalu nol, sehingga panjang muatan tetap 12 byte dan waktu udara serta energi per transmisi (E maksimum 80,5 mJ) tidak berubah. Program uji tanpa siklus mengirim indeks 0.
+
 ### 4.3 Beacon dan ACK
 
-Beacon: 2 byte (0xBE, 0xAC), dipancarkan gateway tiap 1 detik. Pada gateway, selang efektifnya sekitar 1052 ms karena waktu pancar ikut terhitung. ACK: 3 byte (0xAC, 0x4B, n), dengan n jumlah paket yang gateway terima pada jendela ACK itu.
+Beacon: 2 byte (0xBE, 0xAC), dipancarkan gateway tiap 1 detik. Pada gateway, selang efektifnya sekitar 1052 ms karena waktu pancar ikut terhitung. ACK (gateway-1.5): 5 byte (0xAC, 0x4B, n, seq_awal byte tinggi, seq_awal byte rendah), dengan n jumlah paket sah yang gateway terima pada siklus itu dan seq_awal penanda siklus, yaitu nomor urut paket berindeks 0 (`seq - indeks`). Node hanya menerima ACK 5 byte yang penanda siklusnya sama dengan siklusnya sendiri; ACK lain dicetak `ACK_TOLAK penanda=<x> harap=<y>` (atau `ACK_TOLAK panjang=...` untuk ACK 3 byte gateway lama) dan node terus menunggu sampai `ACK_TIMEOUT_MS`. ACK yang diterima dicetak `ACK_TERIMA n=<n> penanda=<s>`. Waktu udara ACK 5 byte sama dengan ACK 3 byte (sekitar 62 ms).
 
 Paket data dikenali dari panjangnya yang tepat 12 byte; panjang lain dianggap derau dan dibuang.
 
@@ -132,8 +135,8 @@ jenis,ts_ms,id_window,seq,arm,e_prev_mJ,vbatt,rssi,snr,ax,ay,az
 | jenis | `DATA` atau `ACK` |
 | ts_ms | milidetik sejak gateway menyala |
 | id_window | ID lintasan, diisi lewat perintah `W` atau sel B1 Sheets; `BELUM-DISET` bila belum |
-| seq | nomor urut paket (pada ACK: jumlah paket diterima) |
-| arm | arm pada paket (kosong pada ACK) |
+| seq | nomor urut paket (pada ACK: jumlah paket diterima, n) |
+| arm | arm pada paket, dari 4 bit bawah byte 0 (pada ACK gateway-1.5: penanda siklus seq_awal; kosong pada gateway lama) |
 | e_prev_mJ | energi paket sebelumnya, mJ |
 | vbatt | tegangan baterai node, V |
 | rssi, snr | RSSI (dBm) dan SNR (dB) paket di gateway |
@@ -143,7 +146,19 @@ Baris berawalan `#` adalah komentar dan dilewati `olah_siklus.py`. Gateway 1.2 m
 
 ### 4.5 Aturan penutupan jendela ACK
 
-Gateway menutup jendela dan mengirim ACK bila rentang nomor urut paket mencapai sepuluh (selisih `seq - seq_awal >= 9`), berapa pun paket yang benar-benar tiba. Bila paket terakhir hilang, jendela ditutup paksa setelah `ACK_IDLE_MS` tanpa paket: 1400 ms sejak gateway 1.3 (800 ms sebelumnya, yang menghasilkan ACK dini bila satu paket hilang di tengah siklus). Dengan cara ini kehilangan paket tetap tampak pada PDR (penyimpangan D16). Nilai 1400 ms hanya untuk uji laboratorium; dua paket hilang berturut-turut atau tiga paket terakhir hilang masih menghasilkan ACK yang salah, sehingga sebelum Tahap 4.6 penutupan siklus akan berbasis posisi paket di dalam siklus dan ACK membawa penanda siklus. Perintah `W` dan ID dari Sheets tidak menyentuh pencacah siklus; ID baru berlaku pada siklus berikutnya. Sejak gateway 1.4 setiap paket divalidasi sebelum dihitung: arm harus 1 sampai 4, tegangan paling tinggi 4,50 V, energi paling tinggi 300 mJ, jarak dari paket sah sebelumnya paling sedikit 150 ms, nomor urut tidak sama dengan paket sebelumnya, dan di dalam siklus terbuka nomor urut berada di rentang siklus itu. Paket yang gagal dicatat sebagai `# TOLAK alasan=...` dan tidak dihitung di ACK. Lima penolakan beruntun membuat radio diinisialisasi ulang (`# RADIO_REINIT`). Aturan ini ditambahkan setelah radio gateway terbukti membaca paket yang sama berulang kali (ACK berisi 19) dan menghasilkan paket palsu beruntun pada 1 November 2026.
+Penyimpangan D16: PDR dihitung dari posisi paket di siklus, bukan dari jumlah penerimaan, sehingga kehilangan paket tetap tampak pada PDR. Sejak gateway-1.5 (catatan Pembimbing I 1 Nov 2026, B.3) gateway mencacah paket per siklus menurut penanda `seq_awal = seq - indeks` dan menutup siklus berdasarkan posisi paket:
+
+- paket berindeks 9 tiba: ACK dikirim sesudah `ACK_JEDA_MS` (50 ms);
+- paket terakhir yang tiba berindeks k < 9: `tenggat = t_terima + (9 - k) x T_int + ACK_JEDA_MS + MARGIN`, dengan `MARGIN = 100 ms + 2 % x (9 - k) x T_int`. `T_int` diukur dari paket pertama dan terakhir yang tiba pada siklus itu bila sudah ada dua paket atau lebih; bila baru satu, dipakai nilai bawaan 585 ms (Arm 1 dan 2), 600 ms (Arm 3), 610 ms (Arm 4), sesuai selang terukur 585, 601, dan 609 ms. Bila tenggat lewat dan siklus belum di-ACK, ACK dikirim berisi jumlah paket sah siklus itu;
+- paket dengan penanda siklus lain menutup siklus lama lebih dulu (ACK-nya dikirim bila belum), lalu membuka siklus baru.
+
+Tenggat terpanjang (hanya paket indeks 0 yang tiba, Arm 4) adalah 9 x 610 + 50 + 210 = 5.750 ms. Bila `T_int` tepat, ACK tenggat mulai dipancar 150 sampai 260 ms sesudah node mulai mendengar, jauh di dalam `ACK_TIMEOUT_MS` 2000 ms yang dihitung node sejak paket ke-10 selesai dipancar. ACK terlalu dini bila selang nyata melebihi `T_int` lebih dari sekitar 28 ms per paket (k = 0); terlalu lambat bila kurang dari `T_int` lebih dari sekitar 186 ms per paket. Perhitungannya tertulis pada komentar `gateway/src/main.cpp`.
+
+Riwayat: gateway 1.2 sampai 1.4 menutup siklus menurut rentang nomor urut dan, bila paket akhir hilang, sesudah `ACK_IDLE_MS` tanpa paket (800 ms, lalu 1400 ms untuk uji laboratorium). Dua paket hilang berturut-turut atau tiga paket terakhir hilang menghasilkan ACK dini yang tidak didengar node; mekanisme itu dihapus pada gateway-1.5.
+
+Perintah `W` dan ID dari Sheets tidak menyentuh pencacah siklus; ID baru berlaku sesudah siklus terbuka di-ACK. Setiap paket divalidasi sebelum dihitung: arm (4 bit bawah) 1 sampai 4, indeks (4 bit atas) 0 sampai 9 (`indeks`), tegangan paling tinggi 4,50 V, energi paling tinggi 300 mJ, jarak dari paket sah sebelumnya paling sedikit 150 ms, indeks yang sama belum diterima pada siklus yang sama (`duplikat`), siklusnya belum di-ACK (`sesudah_ack`), dan siklusnya tidak lebih lama dari siklus terakhir sampai tiga siklus ke belakang (`di_luar_siklus`; nomor urut 0 sampai 9 dikecualikan sebagai tanda NODE_RESET). Paket yang gagal dicatat sebagai `# TOLAK alasan=... indeks=...` dan tidak dihitung di ACK maupun dicetak sebagai DATA, sehingga jumlah DATA per siklus selalu sama dengan n pada ACK. Lima penolakan beruntun (selain `sesudah_ack`) membuat radio diinisialisasi ulang (`# RADIO_REINIT`). Validasi ditambahkan sejak gateway 1.4, setelah radio gateway terbukti membaca paket yang sama berulang kali (ACK berisi 19) dan menghasilkan paket palsu beruntun pada 1 November 2026.
+
+Uji (B.3): env node `uji_hilang` melewatkan paket menurut pola berulang per siklus {}, {5}, {4,5}, {8,9}, {7,8,9}, {0} (mencetak `UJI_HILANG kasus=<i> lewati=<daftar>` dan `LEWATI seq=<s> indeks=<k>`; paket yang dilewati tetap ditunggu selama waktu udaranya dan dihitung terkirim, energinya 0). `tools/cek_uji_hilang.py` memeriksa kriteria Pembimbing I per kasus: node mendengar ACK dan jumlah pada ACK sama dengan jumlah paket yang tercatat di gateway.
 
 ### 4.6 Perintah serial gateway (115200 baud)
 
@@ -173,6 +188,8 @@ Deep sleep menghapus RAM biasa dan memulai program dari awal. Karena itu seluruh
 | `rtc_cooldown_sampai_s`, `rtc_uptime_s` | waktu cooldown dan waktu hidup kumulatif |
 | `rtc_dalam_guard` | status BATTERY_GUARD |
 | `rtc_sweep_arm` | giliran arm pada mode sweep |
+| `rtc_seq_awal` | penanda siklus berjalan: nomor urut paket berindeks 0 (node-1.3) |
+| `rtc_uji_kasus` | kasus berikutnya pada env `uji_hilang` (hanya ada pada build itu) |
 | `rtc_penanda_sah` | penanda keabsahan RTC RAM (0x57554342) |
 
 Pembelajaran SW-UCB memakai sekitar 832 byte dari 8 kB RTC RAM.
@@ -253,7 +270,7 @@ INA219 diatur gain 320 mV, rentang bus 16 V, konversi tunggal 12-bit (532 mikrod
 
 ### 5.6 Radio (radio.cpp)
 
-`radio_kirim_paket()` mengatur TP dan CR sesuai arm, memanggil `energy_begin()`, mengirim paket secara asinkron (`endPacket(true)`), lalu mencuplik energi sampai metode `txDone()` melaporkan flag TxDone (batas pengaman 500 ms). `radio_scan_beacon()` mendengarkan selama 1,2 detik dan mengembalikan RSSI beacon terkuat. `radio_tunggu_ack()` menunggu paket ACK sampai 2 detik dan mengembalikan jumlah paket yang diterima gateway, atau -1.
+`radio_kirim_paket()` mengatur TP dan CR sesuai arm, memanggil `energy_begin()`, mengirim paket secara asinkron (`endPacket(true)`), lalu mencuplik energi sampai metode `txDone()` melaporkan flag TxDone (batas pengaman 500 ms). `radio_scan_beacon()` mendengarkan selama 1,2 detik dan mengembalikan RSSI beacon terkuat. `radio_tunggu_ack(seq_awal_harap)` menunggu paket ACK sampai 2 detik, hanya menerima ACK 5 byte yang penanda siklusnya sama dengan `rtc_seq_awal` (Bagian 4.3), dan mengembalikan jumlah paket yang diterima gateway, atau -1.
 
 ### 5.7 Sensor (sensor.cpp)
 
@@ -285,11 +302,13 @@ Seluruh nilai dikumpulkan di satu berkas supaya dapat dibekukan sesudah Fase Sta
 
 ### 6.1 Alur program
 
-`setup()` menyalakan biled, LCD (bila ada), dan radio LoRa dengan parameter yang sama dengan node; bila radio gagal, layar, biled, dan serial menampilkan `FATAL`. `loop()` mengerjakan, berurutan: pembaruan biled, perintah serial, pembaruan LCD, penerapan ID window dari Sheets, beacon, penutupan jendela yang menggantung, dan penerimaan paket.
+`setup()` menyalakan biled, LCD (bila ada), dan radio LoRa dengan parameter yang sama dengan node; bila radio gagal, layar, biled, dan serial menampilkan `FATAL`. `loop()` mengerjakan, berurutan: pembaruan biled, perintah serial, pembaruan LCD, penerapan ID window dari Sheets, beacon, penutupan siklus yang tenggatnya lewat, dan penerimaan paket.
 
 ### 6.2 Beacon diam saat window aktif (D18)
 
-Radio LoRa bersifat half-duplex, sehingga paket node yang tiba saat gateway memancar beacon hilang. Pada uji meja 1 meter, 319 paket yang diterima tidak memuat satu pun paket pada jendela sekitar 100 ms di tiap siklus 1052 ms, dan PDR hanya 0,87 (0,81 untuk Arm 4). Gateway kini tidak memancar beacon selama ada paket yang diterima dalam 2 detik terakhir (`BEACON_SENYAP_MS`). Node tidak membutuhkan beacon selama window karena memutuskan keluar dari RSSI ACK dan batas waktu. PDR sesudah perubahan 1,00 (413 dari 414 paket).
+Radio LoRa bersifat half-duplex, sehingga paket node yang tiba saat gateway memancar beacon hilang. Pada uji meja 1 meter, 319 paket yang diterima tidak memuat satu pun paket pada jendela sekitar 100 ms di tiap siklus 1052 ms, dan PDR hanya 0,87 (0,81 untuk Arm 4). Gateway kini tidak memancar beacon selama ada paket yang diterima dalam `BEACON_SENYAP_MS` terakhir. Node tidak membutuhkan beacon selama window karena memutuskan keluar dari RSSI ACK dan batas waktu. PDR sesudah perubahan 1,00 (413 dari 414 paket, dengan 2000 ms).
+
+Sejak gateway-1.5 `BEACON_SENYAP_MS` 7000 ms, lebih panjang daripada tenggat ACK terpanjang 5.750 ms ditambah waktu pancar ACK (Bagian 4.5), sehingga beacon tidak pernah dipancar selama siklus masih menunggu paket. Nilai 2000 ms sudah terlampaui bila tiga paket berturut-turut hilang. Konsekuensinya, sesudah node keluar window beacon baru kembali 7 detik sesudah paket terakhir, sehingga deteksi ulang node dapat tertunda sampai satu putaran pindai dan tidur IDLE (sekitar 4,2 detik).
 
 ### 6.3 Unggah ke Google Sheets (unggah_sheets.cpp)
 
@@ -356,9 +375,9 @@ Salinan lokal pustaka LoRa pada node memuat dua perubahan kecil. Pertama, `isTra
 | D13 | DIO0 pada GPIO2 (pin strapping), dipertahankan | `pin_map.h` |
 | D14 | letak INA219 di jalur baterai | (perangkat keras) |
 | D15 | kepergian kendaraan dideteksi pada evaluasi ACK | `evaluasi_reward()` |
-| D16 | PDR dihitung dari rentang nomor urut | gateway `main.cpp` |
+| D16 | PDR dihitung dari posisi paket di siklus: indeks paket di byte 0, tenggat ACK dari sisa paket, ACK membawa penanda siklus yang diperiksa node (gateway-1.5, node-1.3) | gateway `main.cpp`, node `radio.cpp`, `fsm.cpp`, `payload.cpp` |
 | D17 | syarat keluar BATTERY_GUARD pada 3,5 V | `fsm_tick()` |
-| D18 | beacon gateway diam saat window aktif | gateway `main.cpp` |
+| D18 | beacon gateway diam saat window aktif, 7000 ms sejak paket terakhir (lebih panjang daripada tenggat ACK terpanjang 5.750 ms) | gateway `main.cpp` |
 | D19 | modul J5019 menggantikan TP4056 dan MT3608 | (perangkat keras) |
 
 D18 dan D19 baru, dan menunggu keputusan Pembimbing I.
@@ -390,6 +409,7 @@ Env `uji_guard` tidak memakai program tersendiri: ia mengompilasi firmware produ
 | `buat_diagram.py`, `buat_gambar_jurnal.py`, `buat_gambar_slide.py` | membangkitkan diagram alur untuk naskah, artikel jurnal, dan slide |
 | `diagnosa_spi_lora.py` | membaca register SX127x lewat akses GPIO sementara pada ROM loader ESP32, untuk mendiagnosis sambungan SPI tanpa memasang firmware |
 | `uji_biled_gateway.py` | menguji empat warna biled lewat firmware gateway dan menyimpan pembacaan GPIO |
+| `cek_uji_hilang.py` | memeriksa rekaman env `uji_hilang` (log node dan gateway dari `rekam.py`): per siklus, lewat penanda seq_awal, apakah node mendengar ACK, n di node, n pada ACK gateway, dan jumlah DATA gateway; LULUS/GAGAL per kasus; siklus terpotong dilaporkan terpisah |
 
 Alur data: serial gateway direkam ke berkas CSV, lalu `olah_siklus.py` dan `ringkas_log.py` membentuk berkas yang masuk ke buku kerja untuk analisis. Berkas log mentah disimpan di luar repositori (folder `data/` diabaikan git).
 

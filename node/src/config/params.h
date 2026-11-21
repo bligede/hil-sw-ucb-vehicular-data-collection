@@ -110,6 +110,9 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
                                // dengan batas bawah rentang reward [-1, +1]
 
 #define ACK_SETIAP_N   10      // jendela evaluasi ACK (Naskah 4.1)
+// Dihitung sejak paket ke-10 selesai dipancar. Bila paket akhir siklus hilang,
+// ACK gateway-1.5 datang dari tenggat berbasis posisi paket, sekitar 150 sampai
+// 260 ms sesudah node mulai mendengar (perhitungan di gateway/src/main.cpp).
 #define ACK_TIMEOUT_MS 2000UL
 
 // ============================================================
@@ -245,11 +248,13 @@ static const ArmConfig ARM_CONFIG[N_ARMS] = {
 // ============================================================
 // 8. Penanda kompilasi
 // ============================================================
+// 1.3: indeks paket di 4 bit atas byte 0 muatan, penanda siklus pada ACK 5 byte
+// (catatan Pembimbing I 1 Nov 2026, B.3); wajib berpasangan dengan gateway-1.5.
 #if MODE_SWEEP_AKTIF
-  #define FW_VERSI    "node-1.2-sweep"
+  #define FW_VERSI    "node-1.3-sweep"
 #elif MODE_SW_UCB
-  #define FW_VERSI    "node-1.2-swucb"
+  #define FW_VERSI    "node-1.3-swucb"
 #else
-  #define FW_VERSI    "node-1.2-ucb1"
+  #define FW_VERSI    "node-1.3-ucb1"
 #endif
 #define SERIAL_BAUD   115200
