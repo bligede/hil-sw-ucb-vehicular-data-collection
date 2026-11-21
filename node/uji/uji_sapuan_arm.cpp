@@ -22,6 +22,10 @@
 // sekitar 42 % paket hilang, diduga bertabrakan dengan ACK gateway (~2 s sesudah paket), dan
 // isTransmitting() yang langsung false membuat kolom arus/lama transmisi 0; keduanya diperbaiki
 // (jeda 3 s, txDone()).
+// Catatan gateway-1.5 (B.3, 21 Nov 2026): ACK_IDLE_MS sudah tidak ada. Program ini mengisi byte 0
+// hanya dengan nomor arm, jadi gateway-1.5 membaca indeks 0 dan seq_awal = seq; tiap paket tetap
+// menjadi siklus sendiri dan siklus lama ditutup saat paket berikutnya (seq_awal lain) datang,
+// sebelum tenggat ~5,5 s. Program ini tidak mendengarkan ACK, jadi hasilnya tidak berubah.
 //
 //   pio run -e uji_sapuan_arm -t upload
 
